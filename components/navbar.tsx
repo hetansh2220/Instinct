@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Activity } from "lucide-react";
 import { WalletButton } from "./solana/wallet-button";
+import { ActivateButton } from "./solana/activate-button";
 
 export function Navbar() {
   return (
@@ -27,17 +28,14 @@ export function Navbar() {
             >
               Markets
             </Link>
-            <Link
-              href="/console"
-              className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              Console
-            </Link>
           </nav>
         </div>
 
 
-        <WalletButton />
+        <div className="flex items-center gap-2">
+          <ActivateButton />
+          <WalletButton />
+        </div>
       </div>
     </header>
   );

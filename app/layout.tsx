@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SolanaProvider } from "@/components/solana/solanaProvider";
+import { QueryProvider } from "@/components/query-provider";
 import { Navbar } from "@/components/navbar";
 
 const geistSans = Geist({
@@ -30,10 +31,12 @@ export default function RootLayout({
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SolanaProvider>
-          <Navbar />
-          {children}
-        </SolanaProvider>
+        <QueryProvider>
+          <SolanaProvider>
+            <Navbar />
+            {children}
+          </SolanaProvider>
+        </QueryProvider>
       </body>
     </html>
   );
