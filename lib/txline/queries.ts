@@ -10,7 +10,17 @@ async function fetchFixtures(creds: TxlineCreds): Promise<TxlineFixture[]> {
     if (data.error) {
         throw new Error(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
     }
-    return Array.isArray(data.fixtures) ? data.fixtures : [];
+    const fixtures: TxlineFixture[] = Array.isArray(data.fixtures) ? data.fixtures : [];
+
+    // debug: full payload + a breakdown of which competitions came back
+    console.log("[txline] fixtures snapshot:", fixtures);
+    const byComp = fixtures.reduce<Record<string, number>>((acc, f) => {
+        acc[f.Competition] = (acc[f.Competition] ?? 0) + 1;
+        return acc;
+    }, {});
+    console.log(`[txline] ${fixtures.length} fixtures across competitions:`, byComp);
+
+    return fixtures;
 }
 
 /** Live TxLINE fixtures. Only runs once real credentials are available. */

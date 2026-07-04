@@ -27,10 +27,9 @@ export function fixtureToMarket(f: TxlineFixture, now: number): Market {
     const away = f.Participant1IsHome ? f.Participant2 : f.Participant1;
     const [homePool, drawPool, awayPool] = seededPools(f.FixtureId);
 
-    // A 2-hour window after kickoff is treated as "live" for display.
-    const started = now >= f.StartTime;
-    const finished = now >= f.StartTime + 2 * 60 * 60 * 1000;
-    const status: Market["status"] = finished ? "open" : started ? "live" : "open";
+    // Time-derived status (we don't get real match state from the fixtures
+    // snapshot): before kickoff = open, once kickoff passes = live.
+    const status: Market["status"] = now >= f.StartTime ? "live" : "open";
 
     return {
         id: `fx-${f.FixtureId}`,

@@ -30,15 +30,15 @@ export function MarketCard({
     const resolved = market.status === "resolved";
 
     return (
-        <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-border/70">
+        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-border/70">
 
-            <Link href={`/market/${market.id}`} className="flex items-start gap-3">
+            <Link href={`/market/${market.id}`} className="flex items-start gap-3.5">
                 <MatchAvatar home={market.home} away={market.away} />
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="font-mono text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="font-mono text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                         {market.competition}
                     </span>
-                    <span className="text-[15px] leading-snug font-semibold tracking-tight">
+                    <span className="text-base leading-snug font-semibold tracking-tight">
                         {market.home} <span className="text-muted-foreground">vs</span> {market.away}
                     </span>
                 </div>
@@ -57,7 +57,7 @@ export function MarketCard({
                             disabled={resolved}
                             onClick={() => onPick(market, o)}
                             className={cn(
-                                "flex items-center justify-center gap-1.5 rounded-sm border px-3 py-2.5 text-sm font-semibold transition-colors",
+                                "flex items-center justify-center gap-1.5 rounded-md border px-3 py-3.5 text-[15px] font-semibold transition-colors",
                                 OUTCOME_TINT[o.key],
                                 isWinner && "[#18251C]",
                                 isLoser && "[#2A191A]"
@@ -71,10 +71,10 @@ export function MarketCard({
             </div>
 
 
-            <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center justify-between text-xs">
                 <StatusFoot market={market} />
                 <span className="flex items-center gap-1 font-mono tabular-nums text-muted-foreground">
-                    <TrendingUp className="size-3" />
+                    <TrendingUp className="size-3.5" />
                     {formatUsd(totalPool(market))} USDC
                 </span>
             </div>
@@ -84,11 +84,11 @@ export function MarketCard({
 
 function MatchAvatar({ home, away }: { home: string; away: string }) {
     return (
-        <div className="relative size-11 shrink-0">
-            <span className="absolute top-0 left-0 grid size-8 place-items-center rounded-full bg-muted text-sm ring-2 ring-card">
+        <div className="relative size-12 shrink-0">
+            <span className="absolute top-0 left-0 grid size-9 place-items-center rounded-full bg-muted text-base ring-2 ring-card">
                 {teamFlag(home)}
             </span>
-            <span className="absolute right-0 bottom-0 grid size-8 place-items-center rounded-full bg-muted text-sm ring-2 ring-card">
+            <span className="absolute right-0 bottom-0 grid size-9 place-items-center rounded-full bg-muted text-base ring-2 ring-card">
                 {teamFlag(away)}
             </span>
         </div>

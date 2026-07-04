@@ -22,12 +22,7 @@ export function Navbar() {
 
 
           <nav className="hidden items-center gap-1 sm:flex">
-            <Link
-              href="/"
-              className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              Markets
-            </Link>
+
           </nav>
         </div>
 
