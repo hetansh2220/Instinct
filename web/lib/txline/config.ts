@@ -5,9 +5,7 @@ import {
 } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 
-// Your Node backend base URL (it proxies the TxLINE REST API). Override via
-// NEXT_PUBLIC_API_URL; defaults to a local Node server on :4000.
-export const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+export const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export const programId = new PublicKey("6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J");
 export const txlTokenMint = new PublicKey("4Zao8ocPhmMgq7PdsYWyxvqySMGx7xb9cMftPMkEokRG");

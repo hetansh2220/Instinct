@@ -85,11 +85,13 @@ export function useActivate() {
                 method: "POST",
             }).then((r) => r.json());
             if (!jwt) throw new Error("No JWT");
+            console.log("[activate] guest JWT:", jwt);
 
             // 3. sign activation message
             setStatus("signing");
             if (!signMessage) throw new Error("Wallet can't sign messages");
             const walletSignature = toBase64(await signMessage(new TextEncoder().encode(`${sig}::${jwt}`)));
+            console.log("[activate] wallet signature:", walletSignature);
 
             // 4. activate -> API token, then persist. Node endpoint gets this body,
             //    proxies to TxLINE, and returns { token }.
@@ -100,6 +102,7 @@ export function useActivate() {
                 body: JSON.stringify({ txSig: sig, walletSignature, leagues: [], jwt }),
             }).then((r) => r.json());
             if (!activation.token) throw new Error(`Activate failed: ${JSON.stringify(activation)}`);
+            console.log("[activate] API token:", activation.token);
 
             saveCreds({ jwt, apiToken: activation.token });
             setStatus("done");

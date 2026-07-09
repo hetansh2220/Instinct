@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SolanaProvider } from "@/components/solana/solanaProvider";
+import { QueryProvider } from "@/components/query-provider";
 import { Navbar } from "@/components/navbar";
 
 const geistSans = Geist({
@@ -29,11 +30,19 @@ export default function RootLayout({
       lang="en"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&display=swap"
+        />
+      </head>
       <body className="min-h-full flex flex-col">
-        <SolanaProvider>
-          <Navbar />
-          {children}
-        </SolanaProvider>
+        <QueryProvider>
+          <SolanaProvider>
+            <Navbar />
+            {children}
+          </SolanaProvider>
+        </QueryProvider>
       </body>
     </html>
   );
