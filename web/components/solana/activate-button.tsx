@@ -18,7 +18,7 @@ export function ActivateButton() {
     const creds = useTxlineCreds();
     const { activate, status, isActivating, error } = useActivate();
 
-    // only relevant once a wallet is connected and not yet activated
+
     if (!connected || creds) return null;
 
     return (
@@ -33,8 +33,8 @@ export function ActivateButton() {
             {isActivating
                 ? RUNNING_LABEL[status] ?? "Working…"
                 : status === "error"
-                  ? "Retry activate"
-                  : "Subscribe & Activate"}
+                    ? "Retry activate"
+                    : "Subscribe & Activate"}
         </Button>
     );
 }

@@ -4,6 +4,7 @@ import "./globals.css";
 import { SolanaProvider } from "@/components/solana/solanaProvider";
 import { QueryProvider } from "@/components/query-provider";
 import { Navbar } from "@/components/navbar";
+import { ProfileGate } from "@/components/profile/profile-gate";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -41,6 +42,7 @@ export default function RootLayout({
           <SolanaProvider>
             <Navbar />
             {children}
+            <ProfileGate />
           </SolanaProvider>
         </QueryProvider>
       </body>

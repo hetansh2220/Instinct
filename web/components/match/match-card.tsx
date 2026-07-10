@@ -10,7 +10,7 @@ export interface Fixture {
     StartTime?: number;
 }
 
-// "3d 5h" / "5h 20m" / "42m" until kickoff
+
 function timeLeft(ms?: number): string {
     if (!ms) return "";
     const diff = ms - Date.now();
@@ -32,12 +32,12 @@ export function MatchCard({ f, score }: { f: Fixture; score?: { home: number; aw
     const state = !start || start > now ? "upcoming" : now < start + 2.5 * 60 * 60 * 1000 ? "live" : "completed";
     const left = timeLeft(f.StartTime);
 
-    // completed matches only show once their score is confirmed (fetched in the list)
+
     if (state === "completed" && !score) return null;
 
     return (
         <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-            {/* top */}
+
             <div className="flex items-center justify-between px-4 pt-4">
                 <span className="font-mono text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                     {f.Competition ?? "Match"}
@@ -61,7 +61,7 @@ export function MatchCard({ f, score }: { f: Fixture; score?: { home: number; aw
                 )}
             </div>
 
-            {/* matchup */}
+
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 px-4 py-6">
                 <Team name={home} />
                 {score ? (
@@ -76,10 +76,14 @@ export function MatchCard({ f, score }: { f: Fixture; score?: { home: number; aw
                 <Team name={away} />
             </div>
 
-            {/* join contest */}
+
             <div className="px-4 pb-4">
                 <Link
-                    href={`/match/${f.FixtureId}/room`}
+                    href={
+                        state === "completed"
+                            ? `/match/${f.FixtureId}?h=${encodeURIComponent(home ?? "")}&a=${encodeURIComponent(away ?? "")}`
+                            : `/match/${f.FixtureId}/room`
+                    }
                     className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 text-md font-semibold text-foreground shadow-inner shadow-white/5 backdrop-blur-md transition-colors hover:border-white/25 hover:bg-white/15"
                 >
                     {state === "completed" ? "View result" : "Join contest"}
@@ -94,7 +98,7 @@ function Team({ name }: { name?: string }) {
     return (
         <div className="flex flex-col items-center gap-2.5">
             {code ? (
-                // eslint-disable-next-line @next/next/no-img-element
+
                 <img
                     src={`https://flagcdn.com/w160/${code}.png`}
                     alt={name ?? ""}

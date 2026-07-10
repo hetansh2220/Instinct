@@ -36,6 +36,11 @@ export function epochDay(ms = Date.now()): number {
     return Math.floor(ms / 86_400_000);
 }
 
+/** Full historical event stream for a finished fixture. */
+export function getHistorical(creds: TxlineCreds, fixtureId: number) {
+    return call(`/api/scores/historical/${fixtureId}`, creds);
+}
+
 export type FinalScore = { p1: number; p2: number } | null;
 
 /** Batch final scores — one request; the backend computes them server-side. */

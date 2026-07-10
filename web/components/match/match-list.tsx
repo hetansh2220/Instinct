@@ -7,7 +7,7 @@ import { getFixtures, getFinalScores, epochDay } from "@/lib/txline/data";
 import { MatchCard, type Fixture } from "./match-card";
 import { cn } from "@/lib/utils";
 
-const LIVE_WINDOW = 2.5 * 60 * 60 * 1000; // treat first ~2.5h after kickoff as "live"
+const LIVE_WINDOW = 2.5 * 60 * 60 * 1000;
 
 function matchesFilter(f: Fixture, filter: string): boolean {
     if (filter === "All") return true;
@@ -16,7 +16,7 @@ function matchesFilter(f: Fixture, filter: string): boolean {
     if (filter === "Upcoming") return start > now;
     if (filter === "Live") return start <= now && now < start + LIVE_WINDOW;
     if (filter === "Completed") return start > 0 && now >= start + LIVE_WINDOW;
-    return f.Competition === filter; // competition name
+    return f.Competition === filter;
 }
 
 const toList = (raw: unknown): Fixture[] =>
@@ -34,8 +34,8 @@ export function MatchList() {
         queryKey: ["fixtures"],
         enabled: !!creds,
         queryFn: async () => {
-            // upcoming (default window) + one past window (~2 weeks, the only range
-            // where completed matches still have a fetchable score)
+
+
             const today = epochDay();
             const requests = [
                 getFixtures(creds!),
@@ -57,7 +57,7 @@ export function MatchList() {
         return ["All", ...comps, "Upcoming", "Live", "Completed"];
     }, [fixtures]);
 
-    // ids of completed matches within the ~2-week scoreable window
+
     const completedIds = useMemo(() => {
         const now = Date.now();
         return fixtures
@@ -66,7 +66,7 @@ export function MatchList() {
             .sort((a, b) => a - b);
     }, [fixtures]);
 
-    // one request for ALL completed scores (computed server-side) → fast + together
+
     const { data: scoreMap, isLoading: scoresLoading } = useQuery({
         queryKey: ["scores", completedIds],
         enabled: !!creds && completedIds.length > 0,
@@ -84,7 +84,7 @@ export function MatchList() {
 
     if (!creds) return null;
 
-    // hold the skeleton until fixtures AND completed scores are ready → all cards appear at once
+
     if (loading || scoresLoading) {
         return (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -107,7 +107,7 @@ export function MatchList() {
 
     return (
         <div className="flex flex-col gap-6">
-            {/* filter tabs */}
+
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {tabs.map((t) => (
                     <button
@@ -125,7 +125,7 @@ export function MatchList() {
                 ))}
             </div>
 
-            {/* grid */}
+
             {visible.length === 0 ? (
                 <p className="py-16 text-center text-sm text-muted-foreground">No matches here.</p>
             ) : (

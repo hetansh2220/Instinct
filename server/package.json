@@ -9,8 +9,14 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "1.0.0-rc.4",
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "drizzle-kit": "1.0.0-rc.4",
+    "tsx": "^4.23.0"
   }
 }
