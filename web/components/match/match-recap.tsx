@@ -3,132 +3,26 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowDown, ArrowUp, Timer } from "lucide-react";
 import { useTxlineCreds } from "@/lib/txline/creds";
 import { getHistorical } from "@/lib/txline/data";
 import { teamCode, teamFlag } from "@/lib/txline/flags";
+import {
+    EVENT_LABEL,
+    parseHistorical,
+    type Player,
+    type Side,
+    type Snapshot,
+    type TimelineEvent,
+} from "@/lib/txline/timeline";
 import { cn } from "@/lib/utils";
 
-interface HistEvent {
-    Action?: string;
-    Clock?: { Seconds?: number };
-    Ts?: number;
-    Stats?: Record<string, number>;
-    Participant1Id?: number;
-    Participant2Id?: number;
-    Participant1IsHome?: boolean;
-    ParticipantId?: number;
-    TeamId?: number;
-    Data?: Record<string, unknown> & { Type?: string };
-}
-
-const META = new Set([
-    "coverage_update", "comment", "connected", "disconnected", "venue", "pitch", "lineups",
-]);
-
-function statTotal(stats: Record<string, number> | undefined, base: number): number {
-    if (!stats) return 0;
-    const d = stats[String(base)];
-    if (typeof d === "number") return d;
-    let sum = 0;
-    for (const p of [1, 2, 3, 4, 5]) {
-        const v = stats[String(p * 1000 + base)];
-        if (typeof v === "number") sum += v;
-    }
-    return sum;
-}
-
-
-function sideOf(ev: HistEvent, p1Id?: number, p2Id?: number, p1IsHome?: boolean): 1 | 2 | null {
-    const pid = ev.ParticipantId ?? ev.TeamId ?? (ev.Data?.["ParticipantId"] as number | undefined);
-    if (pid != null && pid === p1Id) return 1;
-    if (pid != null && pid === p2Id) return 2;
-    const t = ev.Data?.Type;
-    if (t === "home") return p1IsHome ? 1 : 2;
-    if (t === "away") return p1IsHome ? 2 : 1;
-    return null;
-}
-
-interface TimelineItem {
-    min: number;
-    kind: string;
-    label: string;
-    detail?: string;
-    side: 1 | 2 | null;
-}
-
-function iconFor(kind: string): string {
-    if (kind.includes("goal")) return "⚽";
-    if (kind.includes("red")) return "🟥";
-    if (kind.includes("yellow") || kind.includes("card")) return "🟨";
-    if (kind.includes("sub")) return "🔁";
-    if (kind.includes("penalt")) return "⚪";
-    if (kind.includes("shot")) return "🎯";
-    if (kind.includes("corner")) return "🚩";
-    if (kind.includes("offside")) return "🚫";
-    return "•";
-}
-
-function titleFor(action: string): string {
-    const a = action.replace(/_/g, " ");
-    return a.charAt(0).toUpperCase() + a.slice(1);
-}
-
-function parse(events: HistEvent[]) {
-    const first = events[0] ?? {};
-    const p1Id = first.Participant1Id;
-    const p2Id = first.Participant2Id;
-    const p1IsHome = first.Participant1IsHome ?? true;
-
-    const maxStat = (base: number) => events.reduce((m, ev) => Math.max(m, statTotal(ev.Stats, base)), 0);
-
-
-    const goals: [number, number] = [maxStat(1), maxStat(2)];
-    const corners: [number, number] = [maxStat(7), maxStat(8)];
-    const yellow: [number, number] = [maxStat(3), maxStat(4)];
-    const red: [number, number] = [maxStat(5), maxStat(6)];
-
-
-    const shots: [number, number] = [0, 0];
-    const shotsOnTarget: [number, number] = [0, 0];
-    const offsides: [number, number] = [0, 0];
-    const timeline: TimelineItem[] = [];
-
-    for (const ev of events) {
-        const action = (ev.Action ?? "").toLowerCase();
-        if (!action || META.has(action)) continue;
-        const side = sideOf(ev, p1Id, p2Id, p1IsHome);
-        const blob = JSON.stringify(ev.Data ?? {}).toLowerCase();
-
-        if (side) {
-            const i = side - 1;
-            if (action.includes("shot")) {
-                shots[i]++;
-                if (blob.includes("on target")) shotsOnTarget[i]++;
-            }
-            if (action.includes("offside")) offsides[i]++;
-        }
-
-        const sec = ev.Clock?.Seconds;
-        if (sec != null && sec > 0) {
-            const detailStr = (ev.Data?.["detail"] ?? ev.Data?.["Detail"]) as string | undefined;
-            timeline.push({
-                min: Math.floor(sec / 60),
-                kind: action,
-                label: titleFor(ev.Action ?? ""),
-                detail: detailStr,
-                side,
-            });
-        }
-    }
-    timeline.sort((a, b) => b.min - a.min);
-
-    return { p1IsHome, goals, corners, yellow, red, shots, shotsOnTarget, offsides, timeline };
-}
+const TABS = ["timeline", "stats"] as const;
+type Tab = (typeof TABS)[number];
 
 export function MatchRecap({ matchId, home, away }: { matchId: number; home?: string; away?: string }) {
     const creds = useTxlineCreds();
-    const [tab, setTab] = useState<"stats" | "timeline">("stats");
+    const [tab, setTab] = useState<Tab>("timeline");
 
     const { data, isLoading } = useQuery({
         queryKey: ["historical", matchId],
@@ -136,44 +30,30 @@ export function MatchRecap({ matchId, home, away }: { matchId: number; home?: st
         staleTime: Infinity,
         queryFn: async () => {
             const raw = (await getHistorical(creds!, matchId)) as unknown;
-            return Array.isArray(raw) ? (raw as HistEvent[]) : [];
+            return Array.isArray(raw) ? (raw as Snapshot[]) : [];
         },
     });
 
-    const parsed = useMemo(() => (data ? parse(data) : null), [data]);
+    const parsed = useMemo(() => (data ? parseHistorical(data) : null), [data]);
     const p1IsHome = parsed?.p1IsHome ?? true;
 
-    const toHA = (t?: [number, number]): [number, number] =>
-        !t ? [0, 0] : p1IsHome ? t : [t[1], t[0]];
+    /** Participant side (1|2) -> the team name shown to the user. */
+    const teamOf = (side: Side): string | undefined =>
+        side === 1 ? (p1IsHome ? home : away) : p1IsHome ? away : home;
+    const toHome = <T,>(p1: T, p2: T): [T, T] => (p1IsHome ? [p1, p2] : [p2, p1]);
 
-    const [hg, ag] = toHA(parsed?.goals);
-
-    const rows: { label: string; h: number; a: number }[] = parsed
-        ? [
-            { label: "Shots", ...pair(toHA(parsed.shots)) },
-            { label: "Shots on target", ...pair(toHA(parsed.shotsOnTarget)) },
-            { label: "Corners", ...pair(toHA(parsed.corners)) },
-            { label: "Offsides", ...pair(toHA(parsed.offsides)) },
-            { label: "Yellow cards", ...pair(toHA(parsed.yellow)) },
-            { label: "Red cards", ...pair(toHA(parsed.red)) },
-        ].filter((r) => r.h + r.a > 0 || ["Corners", "Yellow cards", "Red cards"].includes(r.label))
-        : [];
+    const [homeGoals, awayGoals] = toHome(parsed?.finalScore[0] ?? 0, parsed?.finalScore[1] ?? 0);
 
     return (
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-5 py-8 sm:px-8">
-            <Link href="/" className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-                <ArrowLeft className="size-4" /> Matches
-            </Link>
-
-
-            <section className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-6">
+        <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-5 py-8 sm:px-8">
+            <section className="rounded-2xl border border-border bg-card p-6">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                     <TeamCol name={home} />
                     <div className="flex flex-col items-center gap-2">
                         <span className="font-mono text-4xl font-bold tabular-nums">
-                            {isLoading ? "–" : hg}
+                            {isLoading ? "–" : homeGoals}
                             <span className="mx-2 text-muted-foreground">-</span>
-                            {isLoading ? "–" : ag}
+                            {isLoading ? "–" : awayGoals}
                         </span>
                         <span className="rounded-full border border-border px-2.5 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
                             full time
@@ -183,15 +63,16 @@ export function MatchRecap({ matchId, home, away }: { matchId: number; home?: st
                 </div>
             </section>
 
-
             <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-card p-1.5">
-                {(["stats", "timeline"] as const).map((t) => (
+                {TABS.map((t) => (
                     <button
                         key={t}
                         onClick={() => setTab(t)}
                         className={cn(
                             "rounded-xl py-3 font-mono text-xs font-bold tracking-widest uppercase transition-colors",
-                            tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                            tab === t
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:text-foreground"
                         )}
                     >
                         {t}
@@ -199,91 +80,313 @@ export function MatchRecap({ matchId, home, away }: { matchId: number; home?: st
                 ))}
             </div>
 
-            {isLoading ? (
-                <div className="h-64 animate-pulse rounded-2xl bg-card" />
-            ) : tab === "stats" ? (
-                <section className="rounded-2xl border border-border bg-card p-6">
-                    <div className="mb-5 grid grid-cols-[auto_1fr_auto] items-center font-mono text-[11px] tracking-wider uppercase">
-                        <span className="text-foreground">{code(home)}</span>
-                        <span className="text-center text-muted-foreground">Match stats</span>
-                        <span className="text-right text-foreground">{code(away)}</span>
-                    </div>
-                    <div className="flex flex-col gap-4">
-                        {rows.map((r) => {
-                            const total = r.h + r.a || 1;
-                            return (
-                                <div key={r.label} className="flex flex-col gap-1.5">
-                                    <div className="grid grid-cols-[auto_1fr_auto] items-center text-sm">
-                                        <span className="w-10 font-mono font-semibold tabular-nums">{r.h}</span>
-                                        <span className="text-center text-[11px] tracking-wide text-muted-foreground uppercase">
-                                            {r.label}
-                                        </span>
-                                        <span className="w-10 text-right font-mono font-semibold tabular-nums">{r.a}</span>
-                                    </div>
-                                    <div className="flex h-1 gap-0.5">
-                                        <div className="flex flex-1 justify-end overflow-hidden rounded-l-full bg-muted">
-                                            <div className="h-full bg-foreground/60" style={{ width: `${(r.h / total) * 100}%` }} />
-                                        </div>
-                                        <div className="flex flex-1 overflow-hidden rounded-r-full bg-muted">
-                                            <div className="h-full bg-foreground/30" style={{ width: `${(r.a / total) * 100}%` }} />
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <p className="mt-6 text-center font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                        via TxLINE
-                    </p>
-                </section>
+            {isLoading || !parsed ? (
+                <div className="flex flex-col gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="h-28 animate-pulse rounded-2xl bg-card" />
+                    ))}
+                </div>
+            ) : tab === "timeline" ? (
+                parsed.timeline.length ? (
+                    <section className="flex flex-col gap-3">
+                        {parsed.timeline.map((e) => (
+                            <EventCard
+                                key={e.id}
+                                event={e}
+                                teamOf={teamOf}
+                                toHome={toHome}
+                                home={home}
+                                away={away}
+                            />
+                        ))}
+                    </section>
+                ) : (
+                    <Empty>No timeline events for this match.</Empty>
+                )
             ) : (
-                <section className="flex flex-col gap-2">
-                    {parsed && parsed.timeline.length > 0 ? (
-                        parsed.timeline.map((e, i) => (
-                            <div key={i} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-                                <span className="w-10 font-mono text-xs tabular-nums text-muted-foreground">{e.min}&apos;</span>
-                                <span className="text-base">{iconFor(e.kind)}</span>
-                                <span className="flex-1 text-sm">
-                                    <span className="font-semibold">{e.label}</span>
-                                    {e.detail && <span className="ml-2 text-muted-foreground">{e.detail}</span>}
-                                </span>
-                                {e.side && (
-                                    <FlagImg name={e.side === 1 ? (p1IsHome ? home : away) : p1IsHome ? away : home} small />
-                                )}
-                            </div>
-                        ))
-                    ) : (
-                        <p className="py-12 text-center text-sm text-muted-foreground">No timeline events.</p>
-                    )}
-                </section>
+                <StatsPanel
+                    rows={parsed.stats.map((s) => {
+                        const [h, a] = toHome(s.p1, s.p2);
+                        return { label: s.label, h, a };
+                    })}
+                    home={home}
+                    away={away}
+                />
             )}
         </main>
     );
 }
 
-function code(name?: string) {
-    return name?.slice(0, 3).toUpperCase() ?? "—";
+/* --------------------------------------------------------------- timeline */
+
+function EventCard({
+    event,
+    teamOf,
+    toHome,
+    home,
+    away,
+}: {
+    event: TimelineEvent;
+    teamOf: (s: Side) => string | undefined;
+    toHome: <T>(p1: T, p2: T) => [T, T];
+    home?: string;
+    away?: string;
+}) {
+    if (event.kind === "period") {
+        return (
+            <div className="flex flex-col items-center gap-1 py-6">
+                <Timer className="size-5 text-muted-foreground" />
+                <span className="font-heading text-sm font-bold tracking-widest text-muted-foreground uppercase">
+                    {event.label}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">{event.minute}&apos;</span>
+            </div>
+        );
+    }
+
+    const team = event.side ? teamOf(event.side) : undefined;
+    const [hs, as] = toHome(event.score[0], event.score[1]);
+
+    // Minor events stay compact — a full player card per corner would bury the goals.
+    if (event.kind === "corner") {
+        return (
+            <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+                <span className="w-8 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                    {event.minute}&apos;
+                </span>
+                <span className="text-sm">🚩</span>
+                <span className="flex-1 text-sm text-muted-foreground">
+                    Corner <span className="font-medium text-foreground">{team ?? "—"}</span>
+                </span>
+                <Flag name={team} className="h-3 w-4" />
+            </div>
+        );
+    }
+
+    return (
+        <article className="overflow-hidden rounded-2xl border border-border bg-card">
+            {event.kind === "goal" ? (
+                <header className="bg-emerald-600 text-center text-white">
+                    <div className="flex flex-col items-center gap-0.5 py-3">
+                        <span className="text-lg leading-none">⚽</span>
+                        <span className="font-heading text-lg font-extrabold tracking-widest">GOOOAAALLL!!!</span>
+                        <span className="font-mono text-xs font-bold">{event.minute}&apos;</span>
+                    </div>
+                    <div className="bg-black/15 py-1.5 font-mono text-xs font-semibold">
+                        {home ?? "Home"} {hs}
+                        <span className="mx-2 opacity-70">-</span>
+                        {as} {away ?? "Away"}
+                    </div>
+                </header>
+            ) : (
+                <header className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <span className="flex items-center gap-2.5">
+                        <KindIcon kind={event.kind} />
+                        <span className="font-heading text-sm font-bold tracking-widest uppercase">
+                            {EVENT_LABEL[event.kind]}
+                        </span>
+                    </span>
+                    <span className="font-mono text-sm font-bold tabular-nums">{event.minute}&apos;</span>
+                </header>
+            )}
+
+            <div className="flex flex-col gap-4 p-4">
+                {event.kind === "sub" ? (
+                    <>
+                        <PlayerRow player={event.player} team={team} tag="in" />
+                        <PlayerRow player={event.playerOut} team={team} tag="out" />
+                    </>
+                ) : (
+                    <PlayerRow player={event.player} team={team} />
+                )}
+                {describe(event, team) && (
+                    <p className="border-t border-border pt-4 text-sm text-muted-foreground">
+                        {describe(event, team)}
+                    </p>
+                )}
+            </div>
+        </article>
+    );
 }
 
-function pair([h, a]: [number, number]) {
-    return { h, a };
+/**
+ * The feed carries data, not prose, so commentary is templated from it. Returns
+ * "" when there is nothing to add beyond what the card already shows — repeating
+ * "Belgium pick up a yellow card" under a card headed YELLOW CARD / Belgium is
+ * noise, so those cards render without a description at all.
+ */
+function describe(event: TimelineEvent, team?: string): string {
+    const who = event.player?.name;
+    const side = team ?? "The team";
+
+    switch (event.kind) {
+        case "goal":
+            return who
+                ? `${who} scores to make it ${event.score[0]} - ${event.score[1]}.`
+                : "";
+        case "yellow":
+            return who ? `${who} (${side}) has been booked and must now be careful not to get a second yellow card.` : "";
+        case "red":
+            return who
+                ? `${who} (${side}) is sent off, and ${side} are down to ten men.`
+                : `${side} are reduced to ten men.`;
+        case "sub":
+            return event.player && event.playerOut
+                ? `${event.player.name} is replacing ${event.playerOut.name} for ${side}.`
+                : "";
+        default:
+            return "";
+    }
 }
 
-function FlagImg({ name, small }: { name?: string; small?: boolean }) {
+function KindIcon({ kind }: { kind: TimelineEvent["kind"] }) {
+    if (kind === "yellow") return <span className="block h-5 w-3.5 rounded-xs bg-yellow-400" />;
+    if (kind === "red") return <span className="block h-5 w-3.5 rounded-xs bg-red-500" />;
+    return (
+        <span className="flex">
+            <ArrowUp className="size-4 text-emerald-500" />
+            <ArrowDown className="-ml-1 size-4 text-red-500" />
+        </span>
+    );
+}
+
+/**
+ * The scores feed publishes aggregate counters, not player identities, so most
+ * events resolve to a team only. That's the common case, not an error state —
+ * so it renders as a clean team row (flag + name), with no repeated team line
+ * and no placeholder avatar. The player layout only appears when we truly have
+ * a player, which the feed may start providing for other competitions.
+ */
+function PlayerRow({ player, team, tag }: { player?: Player; team?: string; tag?: "in" | "out" }) {
+    return (
+        <div className="flex flex-col gap-1.5">
+            {tag && (
+                <span
+                    className={cn(
+                        "font-mono text-[10px] font-bold tracking-widest uppercase",
+                        tag === "in" ? "text-emerald-500" : "text-red-500"
+                    )}
+                >
+                    {tag}
+                </span>
+            )}
+
+            {player ? (
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate font-heading text-lg font-semibold">{player.name}</span>
+                        <span className="flex items-center gap-1.5 truncate text-sm text-muted-foreground">
+                            <Flag name={team} className="h-3 w-4" />
+                            {team ?? "—"}
+                            {player.number !== undefined ? ` · #${player.number}` : ""}
+                        </span>
+                    </div>
+                    <Avatar name={player.name} />
+                </div>
+            ) : (
+                <div className="flex items-center gap-2.5">
+                    <Flag name={team} className="h-5 w-7" />
+                    <span className="truncate font-heading text-lg font-semibold">{team ?? "—"}</span>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function Avatar({ name }: { name: string }) {
+    const initials = name
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase();
+    return (
+        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-muted font-heading text-sm font-bold text-muted-foreground ring-2 ring-border">
+            {initials}
+        </span>
+    );
+}
+
+/* ------------------------------------------------------------------ stats */
+
+function StatsPanel({
+    rows,
+    home,
+    away,
+}: {
+    rows: { label: string; h: number; a: number }[];
+    home?: string;
+    away?: string;
+}) {
+    return (
+        <section className="rounded-2xl border border-border bg-card p-6">
+            <div className="grid grid-cols-[3rem_1fr_3rem] items-center gap-3 pb-5">
+                <Flag name={home} className="h-6 w-9 justify-self-center" />
+                <span className="text-center font-heading text-sm font-bold tracking-widest uppercase">
+                    Team stats
+                </span>
+                <Flag name={away} className="h-6 w-9 justify-self-center" />
+            </div>
+
+            <div className="flex flex-col">
+                {rows.map((r) => (
+                    <div
+                        key={r.label}
+                        className="grid grid-cols-[3rem_1fr_3rem] items-center gap-3 border-t border-border py-3.5"
+                    >
+                        <StatValue value={r.h} leads={r.h > r.a} />
+                        <span className="text-center text-sm text-muted-foreground">{r.label}</span>
+                        <StatValue value={r.a} leads={r.a > r.h} />
+                    </div>
+                ))}
+            </div>
+
+            <p className="mt-6 text-center font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+                via TxLINE
+            </p>
+        </section>
+    );
+}
+
+/** The higher side is pilled, so the winner of each row reads at a glance. */
+function StatValue({ value, leads }: { value: number; leads: boolean }) {
+    return (
+        <span
+            className={cn(
+                "justify-self-center rounded-full px-2.5 py-1 font-mono text-sm font-semibold tabular-nums",
+                leads ? "bg-emerald-600 text-white" : "text-foreground"
+            )}
+        >
+            {value}
+        </span>
+    );
+}
+
+/* ------------------------------------------------------------------ atoms */
+
+function Empty({ children }: { children: React.ReactNode }) {
+    return <p className="py-16 text-center text-sm text-muted-foreground">{children}</p>;
+}
+
+
+function Flag({ name, className }: { name?: string; className?: string }) {
     const c = teamCode(name);
-    const size = small ? "h-6 w-8" : "h-9 w-12";
     return c ? (
-
-        <img src={`https://flagcdn.com/w160/${c}.png`} alt={name ?? ""} className={cn("rounded object-cover ring-1 ring-border", size)} />
+        <img
+            src={`https://flagcdn.com/w160/${c}.png`}
+            alt=""
+            className={cn("shrink-0 rounded-xs object-cover ring-1 ring-border", className)}
+        />
     ) : (
-        <span className={cn("grid place-items-center rounded bg-muted ring-1 ring-border", size)}>{teamFlag(name)}</span>
+        <span className={cn("shrink-0", className)}>{teamFlag(name)}</span>
     );
 }
 
 function TeamCol({ name }: { name?: string }) {
     return (
         <div className="flex flex-col items-center gap-2.5">
-            <FlagImg name={name} />
+            <Flag name={name} className="h-9 w-12" />
             <span className="text-center text-sm font-extrabold tracking-wide uppercase">{name ?? "—"}</span>
         </div>
     );

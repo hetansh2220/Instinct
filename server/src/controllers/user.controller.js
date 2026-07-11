@@ -40,7 +40,7 @@ export async function upsertUser(req, res) {
       .returning();
     res.json(rows[0]);
   } catch (e) {
-    // unique username collision
+
     if (e?.code === "23505" || /unique/i.test(String(e?.message))) {
       return res.status(409).json({ error: "username already taken" });
     }
