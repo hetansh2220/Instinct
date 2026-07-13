@@ -359,7 +359,7 @@ function StatsPanel({
             </div>
 
             <p className="mt-6 text-center font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                via TxLINE
+                via TxODDS
             </p>
         </section>
     );

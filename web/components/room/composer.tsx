@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ImagePlay, SendHorizontal, Smile, X } from "lucide-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Button } from "@/components/ui/button";
-import { Tenor } from "gif-picker-react/providers/tenor";
+import { Giphy } from "gif-picker-react/providers/giphy";
 import type { Theme } from "gif-picker-react";
 import "gif-picker-react/style.css";
 import type { ChatMessage } from "@/lib/room/types";
+import { previewOf } from "@/lib/room/gif";
 import { cn } from "@/lib/utils";
 
 const MAX = 500;
-const TENOR_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY;
+const GIPHY_KEY = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
 
 // Both pickers are heavy and browser-only, so they load lazily — most messages are
 // just text and shouldn't pay for them. gif-picker-react v2 exports GifPicker as a
-// NAMED export and takes a provider (not an apiKey, as v1 did).
+// NAMED export and takes a provider object (not an apiKey, as v1 did).
 const EmojiPicker = dynamic(() => import("emoji-picker-react").then((m) => m.default), {
     ssr: false,
 });
@@ -44,6 +45,10 @@ export function Composer({
     const [value, setValue] = useState("");
     const [panel, setPanel] = useState<Panel>(null);
     const wrap = useRef<HTMLDivElement>(null);
+
+    // Built once. A fresh provider object on every render makes GifPicker treat it
+    // as a new source and refetch, which can also swallow the click you just made.
+    const giphy = useMemo(() => (GIPHY_KEY ? Giphy(GIPHY_KEY) : null), []);
 
     // Close the picker on an outside click or Escape — it's a popover, not a modal.
     useEffect(() => {
@@ -100,12 +105,18 @@ export function Composer({
                         />
                     ) : (
                         <GifPicker
-                            provider={Tenor(TENOR_KEY!)}
+                            provider={giphy!}
                             theme={"dark" as Theme}
                             width={320}
                             height={400}
                             // A GIF IS the message — there's nothing to type alongside it.
                             onGifClick={(gif) => {
+                                // A provider can hand back a gif with no usable url;
+                                // sending undefined would be silently dropped server-side.
+                                if (!gif?.imageUrl) {
+                                    console.error("[gif] no imageUrl on", gif);
+                                    return;
+                                }
                                 onSend(gif.imageUrl, replyTo?.id);
                                 setPanel(null);
                                 onCancelReply?.();
@@ -122,7 +133,7 @@ export function Composer({
                         <span className="text-[11px] font-semibold text-emerald-400">
                             Replying to {replyTo.user.username}
                         </span>
-                        <span className="truncate text-xs text-muted-foreground">{replyTo.body}</span>
+                        <span className="truncate text-xs text-muted-foreground">{previewOf(replyTo.body)}</span>
                     </span>
                     <button
                         onClick={onCancelReply}
@@ -143,8 +154,8 @@ export function Composer({
                     <Smile className="size-4" />
                 </IconButton>
 
-                {/* Tenor needs a key; without one the button would open a dead panel. */}
-                {TENOR_KEY && (
+                {/* Giphy needs a key; without one the button would open a dead panel. */}
+                {GIPHY_KEY && (
                     <IconButton
                         label="GIF"
                         active={panel === "gif"}

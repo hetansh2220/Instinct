@@ -17,8 +17,7 @@ export function Navbar() {
   const pathname = usePathname();
   const { connected } = useWallet();
 
-  // The landing hero is a full-bleed pitch. A solid bar with a hard bottom border
-  // slices straight through it, so on "/" the navbar floats over the scene instead.
+
   const overHero = pathname === "/";
 
   return (
@@ -35,11 +34,8 @@ export function Navbar() {
         <div className="flex items-center gap-6">
           {/* A connected user gets bounced off "/" anyway, so send them somewhere real. */}
           <Link href={connected ? "/matches" : "/"} className="group flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform group-hover:-rotate-6">
-              <Activity className="size-4.5" strokeWidth={2.5} />
-            </span>
-            <span className="font-heading text-xl font-semibold tracking-tight">
-              Tx<span className="text-primary">LINE</span>
+            <span className="font-heading text-2xl font-semibold tracking-tight">
+              Instinct
             </span>
           </Link>
 

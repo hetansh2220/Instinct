@@ -17,8 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TxLINE — data console",
-  description: "On-chain subscribe → activate → fetch live sports data",
+  title: "Instinct",
 };
 
 export default function RootLayout({

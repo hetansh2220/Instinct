@@ -4,26 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowDown, Reply } from "lucide-react";
 import { avatarUrl } from "@/lib/user";
 import type { ChatMessage, RoomMessage, SystemMessage } from "@/lib/room/types";
+import { gifUrl, previewOf } from "@/lib/room/gif";
 import { cn } from "@/lib/utils";
 
 const time = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-/**
- * A GIF travels as a plain message whose body is its URL (no schema change), so
- * anything that looks like a URL would otherwise render as an image. Only Tenor
- * is trusted — otherwise a user could embed an arbitrary image or tracking pixel
- * in the room by typing a link.
- */
-function gifUrl(body: string): string | null {
-    try {
-        const url = new URL(body.trim());
-        const ok = url.protocol === "https:" && /(^|\.)tenor\.com$/.test(url.hostname);
-        return ok ? url.href : null;
-    } catch {
-        return null;
-    }
-}
 
 /**
  * A message that's nothing but emoji (up to 3) renders large and bubble-less —
@@ -179,7 +164,7 @@ function Bubble({
                             {message.replyTo.username}
                         </span>
                         <span className="line-clamp-1 text-[11px] text-muted-foreground">
-                            {gifUrl(message.replyTo.body) ? "GIF" : message.replyTo.body}
+                            {previewOf(message.replyTo.body)}
                         </span>
                     </button>
                 )}
@@ -187,8 +172,10 @@ function Bubble({
                     <img
                         src={gif}
                         alt="GIF"
+                        // Capped: Giphy's original format is often 1-2 MB and full
+                        // width, which swamps the conversation around it.
                         className={cn(
-                            "max-w-full rounded-2xl ring-1 ring-border transition-opacity",
+                            "max-h-64 w-auto max-w-xs rounded-2xl object-contain ring-1 ring-border transition-opacity",
                             mine ? "rounded-br-sm" : "rounded-bl-sm",
                             message.pending && "opacity-60"
                         )}
