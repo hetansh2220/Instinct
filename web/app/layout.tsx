@@ -27,7 +27,7 @@ export const metadata = {
     siteName: "Instinct",
     images: [
       {
-        url: "/img.png",
+        url: "https://instinct-mu.vercel.app/img.png",
         width: 1200,
         height: 630,
       },
@@ -38,7 +38,7 @@ export const metadata = {
     card: "summary_large_image",
     title: "Instinct",
     description: "Pick a winner, watch it live, climb the leaderboard.",
-    images: ["/img.png"],
+    images: ["https://instinct-mu.vercel.app/img.png"],
   },
 };
 
