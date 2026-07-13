@@ -16,8 +16,30 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Instinct",
+  description: "Pick a winner, watch it live, climb the leaderboard.",
+  metadataBase: new URL("https://instinct-mu.vercel.app"),
+  openGraph: {
+    title: "Instinct",
+    description: "Pick a winner, watch it live, climb the leaderboard.",
+    url: "https://instinct-mu.vercel.app",
+    siteName: "Instinct",
+    images: [
+      {
+        url: "/img.png",
+        width: 1200,
+        height: 630,
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Instinct",
+    description: "Pick a winner, watch it live, climb the leaderboard.",
+    images: ["/img.png"],
+  },
 };
 
 export default function RootLayout({
