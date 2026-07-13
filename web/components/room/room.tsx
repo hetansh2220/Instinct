@@ -41,7 +41,9 @@ export function Room({
 
     // Talking needs an identity; the mandatory-username gate guarantees one exists.
     const me = wallet && profile?.username ? { wallet, username: profile.username } : undefined;
-    const room = useRoom(matchId, me);
+    // Only a LIVE match opens a stream — the server won't hold a feed for a match
+    // that finished (historical covers it) or hasn't started.
+    const room = useRoom(matchId, me, state === "live");
 
     const { data } = useQuery({
         queryKey: ["historical", matchId],
@@ -55,9 +57,17 @@ export function Room({
 
     const parsed = useMemo(() => (data ? parseHistorical(data) : null), [data]);
     const p1IsHome = parsed?.p1IsHome ?? true;
-    const score = parsed
+    const historical = parsed
         ? ((p1IsHome ? parsed.finalScore : [parsed.finalScore[1], parsed.finalScore[0]]) as [number, number])
         : undefined;
+
+    // While a match is live the feed is the truth; historical only exists once it's over.
+    const live = room.live;
+    const score: [number, number] | undefined = live
+        ? live.p1IsHome
+            ? live.score
+            : [live.score[1], live.score[0]]
+        : historical;
 
     // Mobile can't fit three columns, so the rails become tabs.
     const [pane, setPane] = useState<"chat" | "match" | "people">("chat");
@@ -115,6 +125,7 @@ export function Room({
                         score={score}
                         events={parsed?.timeline ?? []}
                         state={state}
+                        minute={live?.minute}
                         kickoff={kickoff}
                         pick={pick}
                         onPick={(p) => submitPick.mutate(p)}

@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import { eq } from "drizzle-orm";
 import { db } from "./config/db.js";
 import { users, messages, entries } from "./db/schema.js";
+import { watch, unwatch, stateOf, setEmitter } from "./live/feed.js";
 
 const MAX_BODY = 500;
 const RATE_LIMIT = 5; // messages...
@@ -92,6 +93,16 @@ export function attachSocket(server) {
     });
     ioRef = io;
 
+    // The live feed pushes match events straight into the room. `match:state` rides
+    // along with every event so a client that missed one still lands on the right
+    // score.
+    setEmitter((fixtureId, event, state) => {
+        io.to(roomIdFor(fixtureId)).emit("match:event", {
+            event,
+            state: { score: state.score, minute: state.minute, finished: state.finished, p1IsHome: state.p1IsHome },
+        });
+    });
+
     /**
      * Handshake auth. The client sends its wallet; we resolve it to a real user
      * row and pin that on the socket. Every message is then attributed from
@@ -126,13 +137,29 @@ export function attachSocket(server) {
         const user = socket.data.user;
         socket.data.sent = [];
 
-        socket.on("room:join", async ({ fixtureId } = {}) => {
+        socket.on("room:join", async ({ fixtureId, live } = {}) => {
             if (!fixtureId) return;
             const roomId = roomIdFor(fixtureId);
 
             socket.join(roomId);
             socket.data.roomId = roomId;
+            socket.data.fixtureId = Number(fixtureId);
             connect(roomId, user.id);
+
+            // Only live matches get a stream. A finished match is served by the
+            // historical endpoint, and an upcoming one has nothing to say yet.
+            if (live) {
+                socket.data.live = true;
+                const state = await watch(fixtureId);
+
+                // A late joiner shouldn't stare at 0-0 until the next goal.
+                if (state) {
+                    socket.emit("match:sync", {
+                        state: { score: state.score, minute: state.minute, finished: state.finished, p1IsHome: state.p1IsHome },
+                        events: [...state.seen.values()],
+                    });
+                }
+            }
 
             await emitMembers(fixtureId);
         });
@@ -143,7 +170,9 @@ export function attachSocket(server) {
 
             socket.leave(roomId);
             disconnect(roomId, user.id);
+            if (socket.data.live) unwatch(socket.data.fixtureId);
             socket.data.roomId = undefined;
+            socket.data.live = false;
 
             await emitMembers(fixtureOf(roomId));
         });
@@ -204,6 +233,7 @@ export function attachSocket(server) {
             const roomId = socket.data.roomId;
             if (!roomId) return;
             disconnect(roomId, user.id);
+            if (socket.data.live) unwatch(socket.data.fixtureId);
             await emitMembers(fixtureOf(roomId));
         });
     });

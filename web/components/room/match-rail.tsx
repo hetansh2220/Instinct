@@ -41,6 +41,7 @@ export function MatchRail({
     score,
     events,
     state,
+    minute,
     kickoff,
     pick,
     onPick,
@@ -53,6 +54,8 @@ export function MatchRail({
     score?: [number, number];
     events: TimelineEvent[];
     state: MatchState;
+    /** Live match clock, pushed from the feed. */
+    minute?: number;
     kickoff?: number;
     pick?: Pick;
     onPick: (p: Pick) => void;
@@ -79,7 +82,7 @@ export function MatchRail({
                 </div>
 
                 <div className="mt-4 flex justify-center">
-                    <Status state={state} kickoff={kickoff} />
+                    <Status state={state} kickoff={kickoff} minute={minute} />
                 </div>
             </section>
 
@@ -131,7 +134,7 @@ export function MatchRail({
     );
 }
 
-function Status({ state, kickoff }: { state: MatchState; kickoff?: number }) {
+function Status({ state, kickoff, minute }: { state: MatchState; kickoff?: number; minute?: number }) {
     const [left, setLeft] = useState("");
 
     useEffect(() => {
@@ -152,7 +155,9 @@ function Status({ state, kickoff }: { state: MatchState; kickoff?: number }) {
     if (state === "live") {
         return (
             <span className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 font-mono text-[10px] font-bold tracking-widest text-red-500 uppercase">
-                <span className="size-1.5 animate-pulse rounded-full bg-red-500" /> live
+                <span className="size-1.5 animate-pulse rounded-full bg-red-500" />
+                {/* The real match clock, straight from the feed. */}
+                {minute ? `live ${minute}'` : "live"}
             </span>
         );
     }

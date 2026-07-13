@@ -1,12 +1,11 @@
+import { txlineHeaders } from "../config/txline.js";
+
 const txline = process.env.TXLINE_ORIGIN;
 
-
-function upstream(req) {
-  return {
-    Authorization: `Bearer ${req.headers["x-jwt"]}`,
-    "X-Api-Token": req.headers["x-api-token"],
-  };
-}
+// The server holds the TxLINE credentials now — it has to, because the live SSE
+// feed is a long-lived connection it owns on the room's behalf. Passing `req` also
+// lets it capture the token from an activated user until TXLINE_API_TOKEN is set.
+const upstream = (req) => txlineHeaders(req);
 
 
 export async function fixtures(req, res) {
@@ -16,7 +15,7 @@ export async function fixtures(req, res) {
     if (req.query.startEpochDay) params.set("startEpochDay", req.query.startEpochDay);
     if (req.query.competitionId) params.set("competitionId", req.query.competitionId);
     const qs = params.toString() ? `?${params}` : "";
-    const r = await fetch(`${txline}/api/fixtures/snapshot${qs}`, { headers: upstream(req) });
+    const r = await fetch(`${txline}/api/fixtures/snapshot${qs}`, { headers: await upstream(req) });
     res.status(r.status).json(await r.json());
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -26,7 +25,7 @@ export async function fixtures(req, res) {
 
 export async function odds(req, res) {
   try {
-    const r = await fetch(`${txline}/api/odds/snapshot/${req.params.fixtureId}`, { headers: upstream(req) });
+    const r = await fetch(`${txline}/api/odds/snapshot/${req.params.fixtureId}`, { headers: await upstream(req) });
     res.status(r.status).json(await r.json());
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -36,7 +35,7 @@ export async function odds(req, res) {
 
 export async function scores(req, res) {
   try {
-    const r = await fetch(`${txline}/api/scores/snapshot/${req.params.fixtureId}`, { headers: upstream(req) });
+    const r = await fetch(`${txline}/api/scores/snapshot/${req.params.fixtureId}`, { headers: await upstream(req) });
     res.status(r.status).json(await r.json());
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -72,7 +71,7 @@ function parseEvents(text) {
 export async function finalScores(req, res) {
   const ids = Array.isArray(req.body?.fixtureIds) ? req.body.fixtureIds : [];
   try {
-    const headers = upstream(req);
+    const headers = await upstream(req);
     const entries = await Promise.all(
       ids.map(async (id) => {
         try {
@@ -100,7 +99,7 @@ export async function finalScores(req, res) {
 export async function scoresHistorical(req, res) {
   try {
     const r = await fetch(`${txline}/api/scores/historical/${req.params.fixtureId}`, {
-      headers: upstream(req),
+      headers: await upstream(req),
     });
     const text = await r.text();
 

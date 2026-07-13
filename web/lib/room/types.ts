@@ -51,8 +51,19 @@ export interface SystemMessage {
 
 export type RoomMessage = ChatMessage | SystemMessage;
 
+/** The match, as it stands right now, pushed from the server's live feed. */
+export interface LiveState {
+    score: [number, number];
+    minute: number;
+    finished: boolean;
+    /** Whether participant 1 is the home side — the score array is p1-first. */
+    p1IsHome: boolean;
+}
+
 export interface Room {
     messages: RoomMessage[];
+    /** Null until a live match sends its first update. */
+    live: LiveState | null;
     members: Member[];
     onlineCount: number;
     connected: boolean;

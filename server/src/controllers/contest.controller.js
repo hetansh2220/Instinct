@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../config/db.js";
 import { users, entries } from "../db/schema.js";
+import { txlineHeaders } from "../config/txline.js";
 
 const txline = process.env.TXLINE_ORIGIN;
 const CORRECT_POINTS = 15;
@@ -20,10 +21,7 @@ const CORRECT_POINTS = 15;
  */
 async function finalScore(req, fixtureId) {
     const r = await fetch(`${txline}/api/scores/historical/${fixtureId}`, {
-        headers: {
-            Authorization: `Bearer ${req.headers["x-jwt"]}`,
-            "X-Api-Token": req.headers["x-api-token"],
-        },
+        headers: await txlineHeaders(req),
     });
     if (!r.ok) throw new Error(`TxLINE ${r.status}`);
 
