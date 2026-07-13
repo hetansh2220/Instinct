@@ -2,25 +2,39 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Activity } from "lucide-react";
 import { WalletButton } from "./solana/wallet-button";
 import { ActivateButton } from "./solana/activate-button";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { href: "/", label: "Matches" },
+  { href: "/matches", label: "Matches" },
   { href: "/leaderboard", label: "Leaderboard" },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
+  const { connected } = useWallet();
+
+  // The landing hero is a full-bleed pitch. A solid bar with a hard bottom border
+  // slices straight through it, so on "/" the navbar floats over the scene instead.
+  const overHero = pathname === "/";
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header
+      className={cn(
+        "sticky top-0 z-50 w-full transition-colors",
+        overHero
+          ? "bg-transparent"
+          : "border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60"
+      )}
+    >
       <div className="flex h-16 w-full items-center justify-between gap-3 px-5 sm:px-8">
 
         <div className="flex items-center gap-6">
-          <Link href="/" className="group flex items-center gap-2.5">
+          {/* A connected user gets bounced off "/" anyway, so send them somewhere real. */}
+          <Link href={connected ? "/matches" : "/"} className="group flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform group-hover:-rotate-6">
               <Activity className="size-4.5" strokeWidth={2.5} />
             </span>
@@ -29,8 +43,10 @@ export function Navbar() {
             </span>
           </Link>
 
+          {/* Signed-out visitors would just be bounced back to "/" by RequireWallet,
+              so don't offer the links at all. */}
           <nav className="flex items-center gap-1">
-            {LINKS.map((l) => (
+            {(connected ? LINKS : []).map((l) => (
               <Link
                 key={l.href}
                 href={l.href}

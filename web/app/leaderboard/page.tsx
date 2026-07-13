@@ -5,6 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { avatarUrl } from "@/lib/user";
 import { useLeaderboard, winRate, type Standing } from "@/lib/room/leaderboard";
+import { RequireWallet } from "@/components/auth/require-wallet";
 import { cn } from "@/lib/utils";
 
 const PER_PAGE = 10;
@@ -22,6 +23,7 @@ export default function LeaderboardPage() {
     const visible = standings.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
 
     return (
+        <RequireWallet>
         <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
             <header className="flex flex-col gap-1">
                 <h1 className="font-heading text-3xl font-semibold tracking-tight">Leaderboard</h1>
@@ -103,6 +105,7 @@ export default function LeaderboardPage() {
                 </nav>
             )}
         </main>
+        </RequireWallet>
     );
 }
 

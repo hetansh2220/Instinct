@@ -128,3 +128,16 @@
     @apply font-sans;
   }
 }
+/* Flag orbit (landing hero).
+   Animates the standalone `rotate` property, NOT `transform` — Tailwind's built-in
+   `spin` keyframes set `transform: rotate(...)`, which wipes out the centering
+   translate on the same element. Two counter-running loops at identical speed: the
+   ring turns, each flag turns back, so flags stay upright while orbiting. */
+@keyframes orbit-cw {
+  from { rotate: 0deg; }
+  to   { rotate: 360deg; }
+}
+@keyframes orbit-ccw {
+  from { rotate: 0deg; }
+  to   { rotate: -360deg; }
+}
