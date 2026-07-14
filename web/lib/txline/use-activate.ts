@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useConnection, useAnchorWallet, useWallet } from "@solana/wallet-adapter-react";
 import * as anchor from "@coral-xyz/anchor";
 import { SystemProgram } from "@solana/web3.js";
@@ -19,7 +19,7 @@ import {
     tokenTreasuryVault,
     getUserTokenAccount,
 } from "@/lib/txline/config";
-import { saveCreds, useTxlineCreds } from "@/lib/txline/creds";
+import { saveCreds } from "@/lib/txline/creds";
 
 const SERVICE_LEVEL_ID = 1; // free World Cup tier
 const DURATION_WEEKS = 4;
@@ -140,40 +140,4 @@ export function useActivate() {
         status === "activating";
 
     return { activate, status, isActivating, error };
-}
-
-/**
- * Activation, run automatically the moment a wallet connects — the user shouldn't
- * have to find a button to make the app work.
- *
- * It only fires once per wallet per session: activation costs an on-chain tx and a
- * signature, so a retry loop would spam the user with wallet popups. A failure
- * therefore leaves a visible Retry rather than silently trying again.
- */
-export function useAutoActivate() {
-    const { connected, publicKey } = useWallet();
-    const creds = useTxlineCreds();
-    const { activate, status, isActivating, error } = useActivate();
-
-    const attempted = useRef<string | null>(null);
-    const wallet = publicKey?.toBase58();
-
-    const run = useCallback(() => {
-        if (!wallet) return;
-        attempted.current = wallet;
-        void activate();
-        // `activate` is recreated each render; the wallet is the real dependency.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [wallet]);
-
-    useEffect(() => {
-        if (!connected || !wallet) {
-            if (!connected) attempted.current = null; // let a reconnect try again
-            return;
-        }
-        if (creds || attempted.current === wallet || isActivating) return;
-        run();
-    }, [connected, wallet, creds, isActivating, run]);
-
-    return { status, isActivating, error, retry: run, activated: !!creds };
 }

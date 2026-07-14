@@ -1,12 +1,9 @@
 "use client";
 
-import { useTxlineCreds } from "@/lib/txline/creds";
 import { MatchList } from "@/components/match/match-list";
 import { RequireWallet } from "@/components/auth/require-wallet";
 
 export default function MatchesPage() {
-  const creds = useTxlineCreds();
-
   return (
     <RequireWallet>
       <main className="w-full flex-1 px-5 py-10 sm:px-8">
@@ -17,15 +14,10 @@ export default function MatchesPage() {
           </p>
         </div>
 
-        {/* RequireWallet guarantees a wallet by here, so the only thing left to wait
-            on is activation, which is what fetches the match data. */}
-        {!creds ? (
-          <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-            Activating your account — this loads the match data.
-          </p>
-        ) : (
-          <MatchList />
-        )}
+        {/* No activation gate. The server holds the TxLINE token, so matches load
+            immediately — this page used to sit behind a 15-30s on-chain transaction
+            that also failed outright on a wallet with no devnet SOL. */}
+        <MatchList />
       </main>
     </RequireWallet>
   );

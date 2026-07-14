@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { ArrowLeft, Users } from "lucide-react";
-import { useTxlineCreds } from "@/lib/txline/creds";
 import { getHistorical } from "@/lib/txline/data";
 import { parseHistorical, type Snapshot } from "@/lib/txline/timeline";
 import { useProfile } from "@/lib/user";
@@ -29,7 +28,6 @@ export function Room({
     away?: string;
     kickoff?: number;
 }) {
-    const creds = useTxlineCreds();
     const { publicKey } = useWallet();
     const wallet = publicKey?.toBase58();
     const { data: profile } = useProfile(wallet);
@@ -47,10 +45,9 @@ export function Room({
 
     const { data } = useQuery({
         queryKey: ["historical", matchId],
-        enabled: !!creds,
         staleTime: Infinity,
         queryFn: async () => {
-            const raw = (await getHistorical(creds!, matchId)) as unknown;
+            const raw = (await getHistorical(matchId)) as unknown;
             return Array.isArray(raw) ? (raw as Snapshot[]) : [];
         },
     });

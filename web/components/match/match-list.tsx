@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useMyEntries } from "@/lib/room/entry";
-import { useTxlineCreds } from "@/lib/txline/creds";
 import { getFixtures, getFinalScores, epochDay } from "@/lib/txline/data";
 import { MatchCard, type Fixture } from "./match-card";
 import { cn } from "@/lib/utils";
@@ -27,7 +26,6 @@ const toList = (raw: unknown): Fixture[] =>
     (Array.isArray(raw) ? raw : ((raw as { fixtures?: Fixture[] })?.fixtures ?? [])) as Fixture[];
 
 export function MatchList() {
-    const creds = useTxlineCreds();
     const { publicKey } = useWallet();
     // One request for the whole grid, so each card knows if it's already joined.
     const { data: myEntries } = useMyEntries(publicKey?.toBase58());
@@ -39,14 +37,13 @@ export function MatchList() {
         error,
     } = useQuery({
         queryKey: ["fixtures"],
-        enabled: !!creds,
         queryFn: async () => {
 
 
             const today = epochDay();
             const requests = [
-                getFixtures(creds!),
-                getFixtures(creds!, { startEpochDay: today - 14 }).catch(() => []),
+                getFixtures(),
+                getFixtures({ startEpochDay: today - 14 }).catch(() => []),
             ];
             const results = await Promise.all(requests);
             const byId = new Map<number, Fixture>();
@@ -85,10 +82,10 @@ export function MatchList() {
 
     const { data: scoreMap, isLoading: scoresLoading } = useQuery({
         queryKey: ["scores", completedIds],
-        enabled: !!creds && completedIds.length > 0,
+        enabled: completedIds.length > 0,
         staleTime: Infinity,
         gcTime: 30 * 60_000,
-        queryFn: () => getFinalScores(creds!, completedIds),
+        queryFn: () => getFinalScores(completedIds),
     });
 
     const scoreFor = (f: Fixture): { home: number; away: number } | undefined => {
@@ -97,8 +94,6 @@ export function MatchList() {
         const p1IsHome = f.Participant1IsHome ?? true;
         return { home: p1IsHome ? raw.p1 : raw.p2, away: p1IsHome ? raw.p2 : raw.p1 };
     };
-
-    if (!creds) return null;
 
 
     if (loading || scoresLoading) {

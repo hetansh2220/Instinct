@@ -6,6 +6,7 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Check, Copy, Sparkles, Wallet } from "lucide-react";
 import { useProfile, avatarUrl } from "@/lib/user";
 import { ProfileDialog } from "@/components/profile/profile-dialog";
+import { ActivateCard } from "@/components/solana/activate-card";
 import { Button } from "@/components/ui/button";
 
 export default function ProfilePage() {
@@ -105,6 +106,9 @@ export default function ProfilePage() {
         <Stat label="Win rate" value={`${winRate}%`} />
         <Stat label="Streak" value={`${streak}${streak > 0 ? "🔥" : ""}`} />
       </div>
+
+      {/* Optional on-chain subscription — nothing in the app depends on it. */}
+      <ActivateCard />
 
       <ProfileDialog wallet={wallet} open={setup} onOpenChange={setSetup} initial={profile} required />
     </main>

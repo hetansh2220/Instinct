@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useTxlineCreds, type TxlineCreds } from "@/lib/txline/creds";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -33,17 +32,16 @@ export interface Contest {
  * cron or job queue needed.
  */
 export function useContest(fixtureId: number, enabled = true) {
-    const creds = useTxlineCreds();
-
     return useQuery({
         queryKey: ["contest", fixtureId],
-        enabled: enabled && !!creds,
+        enabled,
         staleTime: 60_000,
         retry: false,
         queryFn: async (): Promise<Contest> => {
+            // No credentials — the server holds the TxLINE token and fetches the
+            // final score itself.
             const res = await fetch(`${API}/api/contests/${fixtureId}/settle`, {
                 method: "POST",
-                headers: headersFor(creds!),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error ?? `settle failed (${res.status})`);
@@ -52,7 +50,3 @@ export function useContest(fixtureId: number, enabled = true) {
     });
 }
 
-const headersFor = (creds: TxlineCreds) => ({
-    "x-jwt": creds.jwt,
-    "x-api-token": creds.apiToken,
-});

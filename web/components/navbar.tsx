@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Activity } from "lucide-react";
 import { WalletButton } from "./solana/wallet-button";
-import { ActivateButton } from "./solana/activate-button";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -60,7 +59,6 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
-          <ActivateButton />
           <WalletButton />
         </div>
       </div>

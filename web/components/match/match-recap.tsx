@@ -7,7 +7,6 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useContest } from "@/lib/room/contest";
 import { ContestLeaderboard } from "./contest-result";
 import { ArrowLeft, ArrowDown, ArrowUp, Timer } from "lucide-react";
-import { useTxlineCreds } from "@/lib/txline/creds";
 import { getHistorical } from "@/lib/txline/data";
 import { teamCode, teamFlag } from "@/lib/txline/flags";
 import {
@@ -24,7 +23,6 @@ const TABS = ["timeline", "stats", "leaderboard"] as const;
 type Tab = (typeof TABS)[number];
 
 export function MatchRecap({ matchId, home, away }: { matchId: number; home?: string; away?: string }) {
-    const creds = useTxlineCreds();
     const { publicKey } = useWallet();
     const wallet = publicKey?.toBase58();
 
@@ -36,10 +34,9 @@ export function MatchRecap({ matchId, home, away }: { matchId: number; home?: st
 
     const { data, isLoading } = useQuery({
         queryKey: ["historical", matchId],
-        enabled: !!creds,
         staleTime: Infinity,
         queryFn: async () => {
-            const raw = (await getHistorical(creds!, matchId)) as unknown;
+            const raw = (await getHistorical(matchId)) as unknown;
             return Array.isArray(raw) ? (raw as Snapshot[]) : [];
         },
     });
