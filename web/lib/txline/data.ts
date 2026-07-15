@@ -38,9 +38,17 @@ export function epochDay(ms = Date.now()): number {
     return Math.floor(ms / 86_400_000);
 }
 
-/** Full historical event stream for a finished fixture. */
+/** Full historical event stream for a FINISHED fixture. Empty while a match is on. */
 export function getHistorical(fixtureId: number) {
     return call(`/api/scores/historical/${fixtureId}`);
+}
+
+/**
+ * Every update so far in a LIVE fixture. Same shape as the historical stream, so
+ * the same parser reads it — which is how the recap page works mid-match.
+ */
+export function getUpdates(fixtureId: number) {
+    return call(`/api/scores/updates/${fixtureId}`);
 }
 
 export type FinalScore = { p1: number; p2: number } | null;

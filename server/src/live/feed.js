@@ -17,11 +17,17 @@ const RETRY_MS = 5_000;
  */
 const feeds = new Map(); // fixtureId -> { state, controller, watchers, retry }
 
-let emit = () => { };
+let emit = () => {};
+/** Raw TxLINE updates → prediction windows (Seq / Clock). */
+let onRawUpdates = async () => {};
 
 /** Wire the feed to the socket layer (kept out of here so this file has no io dep). */
 export function setEmitter(fn) {
     emit = fn;
+}
+
+export function setRawUpdateHandler(fn) {
+    onRawUpdates = fn ?? (async () => {});
 }
 
 export const stateOf = (fixtureId) => feeds.get(Number(fixtureId))?.state ?? null;
@@ -38,8 +44,49 @@ export async function watch(fixtureId) {
 
     const feed = { state: newState(), controller: null, watchers: 1, closed: false };
     feeds.set(fixtureId, feed);
+
+    // Catch up on what already happened BEFORE streaming. The SSE feed only sends
+    // events from the moment you connect, so without this a room joined at the 70th
+    // minute shows an empty timeline — and a server restart mid-match wipes the lot.
+    await backfill(fixtureId, feed);
+
     connect(fixtureId, feed);
     return feed.state;
+}
+
+async function backfill(fixtureId, feed) {
+    try {
+        const res = await fetch(`${txline}/api/scores/updates/${fixtureId}`, {
+            headers: await txlineHeaders(),
+        });
+        if (!res.ok) throw new Error(`TxLINE ${res.status}`);
+
+        // Despite being a plain GET, this returns SSE-framed lines (`data: {...}`),
+        // not a JSON array — the same quirk as /scores/historical.
+        const updates = (await res.text())
+            .split("\n")
+            .filter((l) => l.startsWith("data:"))
+            .map((l) => {
+                try { return JSON.parse(l.slice(l.indexOf(":") + 1).trim()); } catch { return null; }
+            })
+            .filter(Boolean);
+
+        for (const update of updates) {
+            if (typeof update.Participant1IsHome === "boolean") {
+                feed.state.p1IsHome = update.Participant1IsHome;
+            }
+            // Fold silently — advances lastSeq / clockSeconds on state; no emit,
+            // and prediction windows are not started yet so no resolve.
+            applyUpdate(feed.state, update);
+        }
+
+        console.log(
+            `[live] ${fixtureId} backfilled ${updates.length} updates → ${feed.state.seen.size} events, ${feed.state.score.join("-")} at ${feed.state.minute}' (seq ${feed.state.lastSeq})`
+        );
+    } catch (e) {
+        // Not fatal: we just start from now instead of from kickoff.
+        console.log(`[live] ${fixtureId} backfill failed (${e.message}) — starting from now`);
+    }
 }
 
 export function unwatch(fixtureId) {
@@ -81,6 +128,9 @@ async function connect(fixtureId, feed) {
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? ""; // keep the partial line for the next chunk
 
+            // Batch every update in this chunk so processNewEvents can walk Seq order.
+            const batch = [];
+
             for (const line of lines) {
                 if (!line.startsWith("data:")) continue;
                 let update;
@@ -94,8 +144,28 @@ async function connect(fixtureId, feed) {
                     feed.state.p1IsHome = update.Participant1IsHome;
                 }
 
+                const beforeMinute = feed.state.minute;
+                const beforeClock = feed.state.clockSeconds;
                 const events = applyUpdate(feed.state, update);
                 for (const event of events) emit(fixtureId, event, feed.state);
+
+                // Most updates are possession noise and produce no event — but they
+                // carry the clock. Without this the room's minute only moved when
+                // something happened, so it sat frozen between goals.
+                // Prediction windows need Seconds ticks, not just minute changes.
+                if (!events.length && (feed.state.minute !== beforeMinute || feed.state.clockSeconds !== beforeClock)) {
+                    emit(fixtureId, null, feed.state);
+                }
+
+                batch.push(update);
+            }
+
+            if (batch.length) {
+                try {
+                    await onRawUpdates(fixtureId, batch);
+                } catch (e) {
+                    console.log(`[live] ${fixtureId} window handler: ${e.message}`);
+                }
             }
         }
 

@@ -8,6 +8,7 @@ import dataRoutes from "./src/routes/data.routes.js";
 import userRoutes from "./src/routes/user.routes.js";
 import roomRoutes from "./src/routes/room.routes.js";
 import contestRoutes from "./src/routes/contest.routes.js";
+import predictionRoutes from "./src/routes/prediction.routes.js";
 import { DbConnection } from "./src/config/db.js";
 import { attachSocket } from "./src/socket.js";
 
@@ -23,6 +24,7 @@ app.use(dataRoutes);
 app.use(userRoutes);
 app.use(roomRoutes);
 app.use(contestRoutes);
+app.use(predictionRoutes);
 
 
 const server = createServer(app);

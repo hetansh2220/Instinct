@@ -43,18 +43,6 @@ export async function scores(req, res) {
 }
 
 
-// sum a base stat across full-game + periods ((period*1000)+base legend)
-function statTotal(stats, base) {
-  if (!stats) return 0;
-  if (typeof stats[base] === "number") return stats[base];
-  let sum = 0;
-  for (const p of [1, 2, 3, 4, 5]) {
-    const v = stats[p * 1000 + base];
-    if (typeof v === "number") sum += v;
-  }
-  return sum;
-}
-
 function parseEvents(text) {
   return text
     .split("\n")
@@ -63,6 +51,38 @@ function parseEvents(text) {
       try { return JSON.parse(line.slice(line.indexOf(":") + 1).trim()); } catch { return null; }
     })
     .filter(Boolean);
+}
+
+const isGoal = (ev) =>
+  ev.Action === "goal" ||
+  (ev.Action === "penalty_outcome" && (ev.Data?.Outcome ?? ev.data?.Outcome) === "Scored");
+
+/**
+ * Goals from the event stream — NOT Stats counters.
+ *
+ * Stats can keep a VAR-disallowed goal (France–Spain showed 0-3 from Stats while
+ * the feed had a 61' goal discarded → real score 0-2). Match Ids + action_discarded
+ * are the only reliable way to count.
+ */
+function scoreFromEvents(events) {
+  const goals = new Map(); // Id -> side
+  for (const ev of events) {
+    if (ev.Action === "action_discarded") {
+      goals.delete(ev.Id);
+      continue;
+    }
+    if (!isGoal(ev)) continue;
+    const side = ev.Participant ?? ev.Data?.Participant;
+    if (side !== 1 && side !== 2) continue;
+    goals.set(ev.Id, side);
+  }
+
+  let p1 = 0, p2 = 0;
+  for (const side of goals.values()) {
+    if (side === 1) p1++;
+    else p2++;
+  }
+  return { p1, p2 };
 }
 
 // POST /api/scores/final  body: { fixtureIds: number[] }
@@ -78,12 +98,7 @@ export async function finalScores(req, res) {
           const r = await fetch(`${txline}/api/scores/historical/${id}`, { headers });
           const events = parseEvents(await r.text());
           if (!events.length) return [id, null];
-          let p1 = 0, p2 = 0;
-          for (const ev of events) {
-            p1 = Math.max(p1, statTotal(ev.Stats, 1));
-            p2 = Math.max(p2, statTotal(ev.Stats, 2));
-          }
-          return [id, { p1, p2 }];
+          return [id, scoreFromEvents(events)];
         } catch {
           return [id, null];
         }
@@ -114,6 +129,27 @@ export async function scoresHistorical(req, res) {
       .filter(Boolean);
 
     res.status(r.status).json(events);
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+}
+
+/**
+ * GET /api/scores/updates/:fixtureId
+ *
+ * Every update so far in a LIVE match. /scores/historical only covers finished
+ * fixtures, so this is what a recap page needs while the game is still on.
+ *
+ * Returns SSE-framed lines despite being a plain GET, same as /historical — so it
+ * gets parsed into a JSON array here and comes out in the identical shape, which
+ * means the client can run the very same timeline parser over it.
+ */
+export async function scoresUpdates(req, res) {
+  try {
+    const r = await fetch(`${txline}/api/scores/updates/${req.params.fixtureId}`, {
+      headers: await upstream(req),
+    });
+    res.status(r.status).json(parseEvents(await r.text()));
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

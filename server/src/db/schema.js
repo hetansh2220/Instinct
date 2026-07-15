@@ -69,3 +69,46 @@ export const entries = pgTable(
     },
     (t) => [unique("entries_user_fixture_uniq").on(t.userId, t.fixtureId)]
 );
+
+/**
+ * Rolling live Yes/No windows: "Will there be a goal|corner|card in the next 3 min?"
+ * Resolved from TxLINE Clock.Seconds, not wall clock.
+ */
+export const predictionWindows = pgTable(
+    "prediction_windows",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        fixtureId: integer("fixture_id").notNull(),
+        eventType: varchar("event_type", { length: 16 }).notNull(), // goal | corner | card
+        windowStartClock: integer("window_start_clock").notNull(),
+        windowEndClock: integer("window_end_clock").notNull(),
+        status: varchar("status", { length: 16 }).notNull().default("open"), // open | locked | resolved
+        result: boolean("result"),
+        resolvedAt: timestamp("resolved_at"),
+        createdAt: timestamp("created_at").defaultNow().notNull(),
+    },
+    (t) => [index("prediction_windows_fixture_idx").on(t.fixtureId)]
+);
+
+/** One Yes/No guess per user per prediction window. */
+export const predictions = pgTable(
+    "predictions",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        fixtureId: integer("fixture_id").notNull(),
+        windowId: uuid("window_id")
+            .notNull()
+            .references(() => predictionWindows.id, { onDelete: "cascade" }),
+        guess: varchar("guess", { length: 8 }).notNull(), // yes | no
+        isCorrect: boolean("is_correct"),
+        pointsEarned: integer("points_earned").default(0).notNull(),
+        createdAt: timestamp("created_at").defaultNow().notNull(),
+    },
+    (t) => [
+        unique("predictions_user_window_uniq").on(t.userId, t.windowId),
+        index("predictions_fixture_idx").on(t.fixtureId),
+    ]
+);

@@ -19,8 +19,25 @@ const ACTION_KIND = {
     goal: "goal",
     yellow_card: "yellow",
     red_card: "red",
+    corner: "corner",
     substitution: "sub",
 };
+
+/**
+ * What kind of event this update is — NOT a plain lookup on Action, because a
+ * penalty that goes in is never reported as a "goal".
+ *
+ * It arrives as `penalty_outcome` with `Data.Outcome: "Scored"`, and that is the
+ * ONLY record of it: France v Spain's 22nd-minute penalty put Spain 1-0 up with
+ * no `goal` action anywhere in the feed. A missed or saved penalty is the same
+ * action with a different Outcome, so the Outcome is what decides.
+ */
+export function kindOf(action, data) {
+    if (action === "penalty_outcome") {
+        return data?.Outcome === "Scored" ? "goal" : null;
+    }
+    return ACTION_KIND[action] ?? null;
+}
 
 const displayName = (raw) => {
     if (!raw) return undefined;
@@ -65,16 +82,43 @@ export function applyUpdate(state, update) {
     const data = update.Data ?? {};
     const seconds = update.Clock?.Seconds;
 
+    /**
+     * VAR. The feed retracts an event by re-sending it as `action_discarded` with
+     * the SAME `Id` — that is the only link back to what it cancels. France v Spain
+     * had a 61st-minute goal chalked off this way; without this the room sat on a
+     * phantom 0-3 for the rest of the match, and settlement would have paid it out.
+     */
+    if (action === "action_discarded") {
+        const key = state.byId.get(update.Id);
+        const event = key && state.seen.get(key);
+        if (!event) return [];
+
+        state.seen.delete(key);
+        state.byId.delete(update.Id);
+        if (event.kind === "goal" && event.side) {
+            state.score[event.side - 1] = Math.max(0, state.score[event.side - 1] - 1);
+        }
+        return [{ ...event, retracted: true }];
+    }
+
     // Lineups can arrive at any point; keep the latest.
     const squad = squadFrom(update);
     if (squad) state.squad = squad;
 
     if (typeof seconds === "number") {
+        // Latest clock wins — it is NOT monotonic. TxLINE retracts readings
+        // (`clock_adjustment`, `action_discarded`), so a 52nd-minute event can be
+        // withdrawn and the true clock corrected back down to 51'. Taking the max
+        // would freeze the room on a minute the feed had already taken back.
         state.minute = Math.ceil(seconds / 60);
+        state.clockSeconds = seconds;
+    }
+    if (typeof update.Seq === "number") {
+        state.lastSeq = Math.max(state.lastSeq ?? 0, update.Seq);
     }
     if (action === "game_finalised") state.finished = true;
 
-    const kind = ACTION_KIND[action];
+    const kind = kindOf(action, data);
     if (!kind) return [];
 
     const side = update.Participant ?? data.Participant;
@@ -97,6 +141,7 @@ export function applyUpdate(state, update) {
             playerOut: playerOut?.name,
         };
         state.seen.set(key, event);
+        state.byId.set(update.Id, key);
         return [event];
     }
 
@@ -130,14 +175,21 @@ export function applyUpdate(state, update) {
         score: [state.score[0], state.score[1]],
     };
     state.seen.set(key, event);
+    state.byId.set(update.Id, key); // so a later action_discarded can find it
     return [event];
 }
 
 export const newState = () => ({
     score: [0, 0],
     minute: 0,
+    /** Raw Clock.Seconds from the feed — used by prediction windows. */
+    clockSeconds: 0,
+    /** Highest TxLINE Seq folded so far. */
+    lastSeq: 0,
     finished: false,
     squad: null,
     seen: new Map(),
+    /** TxLINE event Id -> our event key. The only way to honour a retraction. */
+    byId: new Map(),
     p1IsHome: true,
 });

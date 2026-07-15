@@ -7,7 +7,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useContest } from "@/lib/room/contest";
 import { ContestLeaderboard } from "./contest-result";
 import { ArrowLeft, ArrowDown, ArrowUp, Timer } from "lucide-react";
-import { getHistorical } from "@/lib/txline/data";
+import { getHistorical, getUpdates } from "@/lib/txline/data";
 import { teamCode, teamFlag } from "@/lib/txline/flags";
 import {
     EVENT_LABEL,
@@ -32,16 +32,34 @@ export function MatchRecap({ matchId, home, away }: { matchId: number; home?: st
 
     const [active, setActive] = useState<Tab>("timeline");
 
+    /**
+     * /scores/historical only covers FINISHED matches — it returns nothing while a
+     * game is in play, which is why this page used to show "FULL TIME 0-0" over a
+     * live match. So: try historical, and if it's empty fall back to the live
+     * updates feed, which has the identical shape and parses the same way.
+     */
     const { data, isLoading } = useQuery({
-        queryKey: ["historical", matchId],
-        staleTime: Infinity,
+        queryKey: ["recap", matchId],
+        // Refresh while a match is live; harmless once it's finished and cached.
+        refetchInterval: (q) => (q.state.data?.live ? 20_000 : false),
         queryFn: async () => {
-            const raw = (await getHistorical(matchId)) as unknown;
-            return Array.isArray(raw) ? (raw as Snapshot[]) : [];
+            const done = (await getHistorical(matchId)) as unknown;
+            if (Array.isArray(done) && done.length) {
+                return { snapshots: done as Snapshot[], live: false };
+            }
+            const now = (await getUpdates(matchId)) as unknown;
+            return {
+                snapshots: Array.isArray(now) ? (now as Snapshot[]) : [],
+                live: Array.isArray(now) && now.length > 0,
+            };
         },
     });
 
-    const parsed = useMemo(() => (data ? parseHistorical(data) : null), [data]);
+    const live = data?.live ?? false;
+    const parsed = useMemo(
+        () => (data?.snapshots.length ? parseHistorical(data.snapshots, live) : null),
+        [data, live]
+    );
     const p1IsHome = parsed?.p1IsHome ?? true;
 
     /** Participant side (1|2) -> the team name shown to the user. */
@@ -62,9 +80,16 @@ export function MatchRecap({ matchId, home, away }: { matchId: number; home?: st
                             <span className="mx-2 text-muted-foreground">-</span>
                             {isLoading ? "–" : awayGoals}
                         </span>
-                        <span className="rounded-full border border-border px-2.5 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                            full time
-                        </span>
+                        {live ? (
+                            <span className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 font-mono text-[10px] font-bold tracking-widest text-red-500 uppercase">
+                                <span className="size-1.5 animate-pulse rounded-full bg-red-500" />
+                                live {parsed?.minute ? `${parsed.minute}'` : ""}
+                            </span>
+                        ) : (
+                            <span className="rounded-full border border-border px-2.5 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+                                full time
+                            </span>
+                        )}
                     </div>
                     <TeamCol name={away} />
                 </div>

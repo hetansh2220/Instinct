@@ -65,6 +65,8 @@ export interface Parsed {
     timeline: TimelineEvent[];
     finalScore: [number, number];
     stats: { label: string; p1: number; p2: number }[];
+    /** Latest clock seen in the feed — the live minute while a match is on. */
+    minute: number;
 }
 
 /** Per the OpenAPI spec (SoccerData): the per-update event detail. */
@@ -80,6 +82,8 @@ export interface SoccerData {
     Participant?: number;
     Minutes?: number;
     PlayerId?: number;
+    /** On `penalty_outcome`: "Scored" | "Missed" | "Saved" — a scored one IS the goal. */
+    Outcome?: string;
     PlayerInId?: number;
     PlayerOutId?: number;
     Type?: string;
@@ -100,6 +104,8 @@ export interface LineupData {
 
 export interface Snapshot {
     Action?: string;
+    /** The event's identity. A retraction (`action_discarded`) reuses it. */
+    Id?: number;
     Clock?: { Seconds?: number; Period?: number };
     Ts?: number;
     Stats?: Record<string, number>;
@@ -206,12 +212,32 @@ const ACTION_KIND: Record<string, EventKind> = {
     substitution: "sub",
 };
 
-export function parseHistorical(events: Snapshot[]): Parsed {
+/**
+ * A converted penalty is NEVER reported as a "goal" — it comes through as
+ * `penalty_outcome` with `Data.Outcome: "Scored"`, and that update is the only
+ * record of it. Missed and saved penalties share the action, so the Outcome
+ * decides whether it counts.
+ */
+function kindOf(action: string | undefined, data: SoccerData): EventKind | undefined {
+    if (action === "penalty_outcome") {
+        return data.Outcome === "Scored" ? "goal" : undefined;
+    }
+    return ACTION_KIND[action ?? ""];
+}
+
+/**
+ * Folds a fixture's update stream into a timeline, score and stats.
+ *
+ * The LIVE feed (/scores/updates) has the identical shape as the finished one
+ * (/scores/historical), so the same fold reads both — `live` only changes whether
+ * the closing divider claims the match is over.
+ */
+export function parseHistorical(events: Snapshot[], live = false): Parsed {
     const first = events[0] ?? {};
     const p1IsHome = first.Participant1IsHome ?? true;
     const lineups = extractLineups(events);
     const squad = [...lineups.p1, ...lineups.p2];
-    const byId = (id?: number) =>
+    const playerById = (id?: number) =>
         typeof id === "number" ? squad.find((p) => p.ids.includes(id)) : undefined;
 
     // Ts is wall-clock and monotonic, so it is the only ordering we need.
@@ -224,12 +250,28 @@ export function parseHistorical(events: Snapshot[]): Parsed {
      * enriched as the amendments arrive, rather than taken at first sight.
      */
     const collected = new Map<string, TimelineEvent>();
+    /** TxLINE event Id -> our key, so a retraction can find what it cancels. */
+    const byId = new Map<number, string>();
     let lastMinute = 0;
 
     for (const snapshot of ordered) {
-        const kind = ACTION_KIND[snapshot.Action ?? ""];
         const data = dataOf(snapshot);
+        const kind = kindOf(snapshot.Action, data);
         const seconds = snapshot.Clock?.Seconds;
+
+        /**
+         * VAR: the feed cancels an event by re-sending it as `action_discarded` with
+         * the same Id. France v Spain's 61st-minute goal was chalked off this way —
+         * ignore it and the timeline shows a goal that never counted.
+         */
+        if (snapshot.Action === "action_discarded") {
+            const key = typeof snapshot.Id === "number" ? byId.get(snapshot.Id) : undefined;
+            if (key) {
+                collected.delete(key);
+                byId.delete(snapshot.Id!);
+            }
+            continue;
+        }
 
         // Football minutes round UP: 1761s is the 30th minute, not the 29th.
         const minute = seconds !== undefined ? Math.ceil(seconds / 60) : data.Minutes ?? 0;
@@ -242,15 +284,16 @@ export function parseHistorical(events: Snapshot[]): Parsed {
             // Subs are only real once both players are named; earlier copies are stubs.
             if (data.PlayerInId === undefined || data.PlayerOutId === undefined) continue;
             const key = `sub|${data.PlayerInId}|${data.PlayerOutId}`;
+            if (typeof snapshot.Id === "number") byId.set(snapshot.Id, key);
             if (collected.has(key)) continue;
             collected.set(key, {
                 id: key,
                 kind,
                 minute,
-                side: side ?? byId(data.PlayerInId)?.side ?? 1,
+                side: side ?? playerById(data.PlayerInId)?.side ?? 1,
                 score: [0, 0],
-                player: byId(data.PlayerInId),
-                playerOut: byId(data.PlayerOutId),
+                player: playerById(data.PlayerInId),
+                playerOut: playerById(data.PlayerOutId),
             });
             continue;
         }
@@ -258,12 +301,13 @@ export function parseHistorical(events: Snapshot[]): Parsed {
         // One goal/card/corner == one (action, clock, team). Re-emissions share it.
         const key = `${kind}|${seconds}|${side ?? "?"}`;
         const existing = collected.get(key);
-        const player = byId(data.PlayerId);
+        const player = playerById(data.PlayerId);
 
         if (existing) {
             if (player && !existing.player) existing.player = player; // the amendment named them
         } else {
             collected.set(key, { id: key, kind, minute, side: side ?? null, score: [0, 0], player });
+            if (typeof snapshot.Id === "number") byId.set(snapshot.Id, key);
         }
     }
 
@@ -281,7 +325,11 @@ export function parseHistorical(events: Snapshot[]): Parsed {
             id, kind: "period", label, minute, side: null, score: [score[0], score[1]],
         });
         timeline.unshift(divider("start", "Kick off", 0));
-        timeline.push(divider("end", "End of match", lastMinute));
+        // A match still being played hasn't ended — saying so over a live feed is the
+        // difference between a recap and a lie.
+        timeline.push(
+            live ? divider("end", "In progress", lastMinute) : divider("end", "End of match", lastMinute)
+        );
     }
 
     timeline.reverse(); // newest first, like a live blog
@@ -302,5 +350,5 @@ export function parseHistorical(events: Snapshot[]): Parsed {
         { label: "Red cards", p1: latest(5), p2: latest(6) },
     ];
 
-    return { p1IsHome, lineups, timeline, finalScore: [score[0], score[1]], stats };
+    return { p1IsHome, lineups, timeline, finalScore: [score[0], score[1]], stats, minute: lastMinute };
 }

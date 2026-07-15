@@ -18,7 +18,15 @@ const CORRECT_POINTS = 15;
  *
  * The feed RE-EMITS each goal as it learns more about it, so identical goals are
  * deduped by (clock, participant) — counting raw emissions would treble the score.
+ *
+ * A penalty that is scored does NOT produce a "goal" action. It arrives as
+ * `penalty_outcome` with `Data.Outcome: "Scored"` and nothing else, so counting
+ * only `Action: "goal"` would have settled France 0-1 Spain as a DRAW.
  */
+const isGoal = (ev) =>
+    ev.Action === "goal" ||
+    (ev.Action === "penalty_outcome" && (ev.Data?.Outcome ?? ev.data?.Outcome) === "Scored");
+
 async function finalScore(req, fixtureId) {
     const r = await fetch(`${txline}/api/scores/historical/${fixtureId}`, {
         headers: await txlineHeaders(req),
@@ -35,17 +43,27 @@ async function finalScore(req, fixtureId) {
 
     if (!events.length) throw new Error("no events — match may not be finished");
 
-    const goals = new Set();
+    // Goals by TxLINE event Id, because VAR takes them away again: a disallowed
+    // goal is re-sent as `action_discarded` with the SAME Id, and that is the only
+    // link back to what it cancels. France v Spain had one chalked off at 61' —
+    // counting it would have settled a 0-2 as 0-3 and paid out on a goal that
+    // never stood.
+    const goals = new Map(); // Id -> side
     for (const ev of events) {
-        if (ev.Action !== "goal") continue;
+        if (ev.Action === "action_discarded") {
+            goals.delete(ev.Id);
+            continue;
+        }
+        if (!isGoal(ev)) continue;
         const side = ev.Participant ?? ev.Data?.Participant;
         if (side !== 1 && side !== 2) continue;
-        goals.add(`${ev.Clock?.Seconds ?? "?"}|${side}`);
+        // Re-emissions of one goal share an Id, so this dedupes them too.
+        goals.set(ev.Id, side);
     }
 
     let p1 = 0, p2 = 0;
-    for (const key of goals) {
-        if (key.endsWith("|1")) p1++;
+    for (const side of goals.values()) {
+        if (side === 1) p1++;
         else p2++;
     }
 
@@ -109,7 +127,7 @@ export async function settle(req, res) {
             // this row: the second update matches nothing.
             const [updated] = await db
                 .update(entries)
-                .set({ points: award, settled: true })
+                .set({ points: sql`${entries.points} + ${award}`, settled: true })
                 .where(and(eq(entries.id, entry.id), eq(entries.settled, false)))
                 .returning();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -13,7 +13,7 @@ import type { ChatMessage } from "@/lib/room/types";
 import { useEntry, useSubmitPick } from "@/lib/room/entry";
 import { ChatStream } from "./chat-stream";
 import { Composer } from "./composer";
-import { MatchRail, matchState, type Pick } from "./match-rail";
+import { MatchRail, matchState, type KeyEvent, type Pick } from "./match-rail";
 import { MemberRail } from "./member-rail";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +65,36 @@ export function Room({
             ? live.score
             : [live.score[1], live.score[0]]
         : historical;
+
+    /**
+     * The rail's events come from whichever source is actually publishing. Reading
+     * the historical fold mid-match left it empty ("No goals yet") while the chat
+     * right beside it was showing corners and a booking — historical isn't written
+     * until full time.
+     */
+    const keyEvents: KeyEvent[] = useMemo(() => {
+        if (live) {
+            return room.messages
+                .filter((m) => m.kind === "system")
+                .map((m) => ({ id: m.id, kind: m.event, minute: m.minute, player: m.player }));
+        }
+        return (parsed?.timeline ?? []).map((e) => ({
+            id: e.id,
+            kind: e.kind,
+            minute: e.minute,
+            player: e.player?.name,
+        }));
+    }, [live, room.messages, parsed]);
+
+    /**
+     * The feed talks in participant sides (1|2); the room talks in team names. Which
+     * is which depends on p1IsHome, and only the feed knows that.
+     */
+    const sidesAreHome = live?.p1IsHome ?? p1IsHome;
+    const teamOf = useCallback(
+        (side: 1 | 2) => (side === 1 ? (sidesAreHome ? home : away) : sidesAreHome ? away : home),
+        [sidesAreHome, home, away]
+    );
 
     // Mobile can't fit three columns, so the rails become tabs.
     const [pane, setPane] = useState<"chat" | "match" | "people">("chat");
@@ -120,7 +150,9 @@ export function Room({
                         home={home}
                         away={away}
                         score={score}
-                        events={parsed?.timeline ?? []}
+                        events={keyEvents}
+                        round={room.round}
+                        onAnswer={room.answer}
                         state={state}
                         minute={live?.minute}
                         kickoff={kickoff}
@@ -152,7 +184,12 @@ export function Room({
                             {room.error ?? "Connecting…"}
                         </div>
                     )}
-                    <ChatStream messages={room.messages} meWallet={wallet} onReply={setReplyTo} />
+                    <ChatStream
+                        messages={room.messages}
+                        meWallet={wallet}
+                        onReply={setReplyTo}
+                        teamOf={teamOf}
+                    />
                     <Composer
                         onSend={room.send}
                         connected={room.connected}

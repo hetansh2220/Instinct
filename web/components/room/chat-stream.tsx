@@ -26,10 +26,13 @@ export function ChatStream({
     messages,
     meWallet,
     onReply,
+    teamOf,
 }: {
     messages: RoomMessage[];
     meWallet?: string;
     onReply?: (m: ChatMessage) => void;
+    /** Participant side (1|2) -> team name, so events can say WHO. */
+    teamOf?: (side: 1 | 2) => string | undefined;
 }) {
     const bottom = useRef<HTMLDivElement>(null);
     const scroller = useRef<HTMLDivElement>(null);
@@ -39,6 +42,23 @@ export function ChatStream({
     // someone back down mid-scroll is the fastest way to ruin a chat UI.
     useEffect(() => {
         if (pinned) bottom.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, pinned]);
+
+    /**
+     * Re-pin whenever the content itself grows, not just when a message arrives.
+     * A GIF has no height until it loads, so it lands AFTER the scroll it
+     * triggered and shoves whatever came next below the fold — which is how a
+     * goal card ended up invisible under the composer, with no "New messages"
+     * button either, because no scroll event fired to unpin.
+     */
+    useEffect(() => {
+        const el = scroller.current;
+        if (!el) return;
+        const observer = new ResizeObserver(() => {
+            if (pinned) el.scrollTop = el.scrollHeight;
+        });
+        for (const child of el.children) observer.observe(child);
+        return () => observer.disconnect();
     }, [messages, pinned]);
 
     function onScroll() {
@@ -62,7 +82,8 @@ export function ChatStream({
                 )}
 
                 {messages.map((m, i) => {
-                    if (m.kind === "system") return <SystemCard key={m.id} message={m} />;
+                    if (m.kind === "system")
+                        return <SystemCard key={m.id} message={m} teamOf={teamOf} />;
 
                     // Consecutive messages from one person collapse into a run: the
                     // avatar and name appear once, which is what kills the dead space.
@@ -115,7 +136,7 @@ function Bubble({
         <div
             id={`msg-${message.id}`}
             className={cn(
-                "group flex items-end gap-2.5 scroll-mt-4 transition-colors",
+                "group flex shrink-0 items-end gap-2.5 scroll-mt-4 transition-colors",
                 mine && "flex-row-reverse",
                 !grouped && "mt-3" // breathing room between speakers, tight within a run
             )}
@@ -225,19 +246,29 @@ function Bubble({
  * The match interrupting the conversation. Deliberately full-bleed and loud —
  * a goal should physically break the flow of chat, the way it breaks the room.
  */
-function SystemCard({ message }: { message: SystemMessage }) {
+function SystemCard({ message, teamOf }: { message: SystemMessage; teamOf?: (side: 1 | 2) => string | undefined }) {
+    // Who it happened to. A corner with no team is just trivia — the room needs to
+    // know which end the ball is at.
+    const team = message.side ? teamOf?.(message.side) : undefined;
+
+    // No enter animation here: `animate-in fade-in-0` left the card stuck at
+    // opacity 0 in the stream — a goal that doesn't paint is worse than one that
+    // doesn't fade.
     if (message.event === "goal") {
         return (
-            <div className="animate-in fade-in-0 zoom-in-95 overflow-hidden rounded-2xl bg-emerald-600 text-center text-white duration-300">
+            <div className="my-1 shrink-0 overflow-hidden rounded-2xl bg-emerald-600 text-center text-white">
                 <div className="flex flex-col items-center gap-0.5 py-3">
                     <span className="text-xl leading-none">⚽</span>
                     <span className="font-heading text-base font-extrabold tracking-widest">GOAL</span>
                     <span className="text-sm font-semibold">
-                        {message.player ?? message.team}
+                        {message.player ?? team ?? message.team}
                         {message.minute !== undefined && (
                             <span className="ml-1.5 font-mono text-xs opacity-80">{message.minute}&apos;</span>
                         )}
                     </span>
+                    {message.player && team && (
+                        <span className="font-mono text-[10px] tracking-wider uppercase opacity-80">{team}</span>
+                    )}
                 </div>
                 {message.score && (
                     <div className="bg-black/20 py-1.5 font-mono text-xs font-bold tabular-nums">
@@ -250,6 +281,7 @@ function SystemCard({ message }: { message: SystemMessage }) {
 
     const meta: Record<string, { icon: string; label: string }> = {
         yellow: { icon: "🟨", label: "Yellow card" },
+        corner: { icon: "🚩", label: "Corner" },
         red: { icon: "🟥", label: "Red card" },
         sub: { icon: "🔁", label: "Substitution" },
         kickoff: { icon: "⏱", label: "Kick off" },
@@ -258,10 +290,11 @@ function SystemCard({ message }: { message: SystemMessage }) {
     const { icon, label } = meta[message.event] ?? { icon: "•", label: message.event };
 
     return (
-        <div className="flex items-center justify-center gap-2.5 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs">
+        <div className="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-xs">
             <span>{icon}</span>
             <span className="font-mono font-bold tracking-widest text-muted-foreground uppercase">{label}</span>
             {message.player && <span className="font-medium">{message.player}</span>}
+            {team && <span className="font-medium text-muted-foreground">{team}</span>}
             {message.minute !== undefined && (
                 <span className="font-mono tabular-nums text-muted-foreground">{message.minute}&apos;</span>
             )}

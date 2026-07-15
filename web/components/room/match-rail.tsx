@@ -13,10 +13,26 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { teamCode, teamFlag } from "@/lib/txline/flags";
-import type { TimelineEvent } from "@/lib/txline/timeline";
+import { RoundCard } from "./round-card";
+import type { Round } from "@/lib/room/types";
 import { cn } from "@/lib/utils";
 
-const ICON: Record<string, string> = { goal: "⚽", yellow: "🟨", red: "🟥", sub: "🔁" };
+const ICON: Record<string, string> = { goal: "⚽", yellow: "🟨", red: "🟥", corner: "🚩", sub: "🔁" };
+
+/** What "key" means here: the events worth a line in the rail, cards included. */
+const KEY_KINDS = new Set(["goal", "red", "yellow"]);
+
+/**
+ * Just enough to list an event. Deliberately NOT TimelineEvent — the rail is fed
+ * from the live socket during a match and from the historical fold after it, and
+ * only these four fields exist in both.
+ */
+export interface KeyEvent {
+    id: string;
+    kind: string;
+    minute?: number;
+    player?: string;
+}
 const LIVE_WINDOW = 2.5 * 60 * 60 * 1000;
 
 export type MatchState = "upcoming" | "live" | "completed";
@@ -40,6 +56,8 @@ export function MatchRail({
     away,
     score,
     events,
+    round,
+    onAnswer,
     state,
     minute,
     kickoff,
@@ -52,7 +70,10 @@ export function MatchRail({
     home?: string;
     away?: string;
     score?: [number, number];
-    events: TimelineEvent[];
+    events: KeyEvent[];
+    /** The round in flight, or the one that just resolved. */
+    round?: Round | null;
+    onAnswer?: (id: string, choice: boolean) => void;
     state: MatchState;
     /** Live match clock, pushed from the feed. */
     minute?: number;
@@ -62,7 +83,9 @@ export function MatchRail({
     pending?: boolean;
     error?: string | null;
 }) {
-    const key = events.filter((e) => e.kind === "goal" || e.kind === "red");
+    const key = events
+        .filter((e) => KEY_KINDS.has(e.kind))
+        .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
 
     return (
         // Cards size to their contents and the column stops there — stretching the
@@ -108,7 +131,7 @@ export function MatchRail({
                 <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
                     {key.length === 0 ? (
                         <p className="py-3 text-xs text-muted-foreground">
-                            {state === "upcoming" ? "Match hasn't started." : "No goals yet."}
+                            {state === "upcoming" ? "Match hasn't started." : "Nothing yet."}
                         </p>
                     ) : (
                         key.map((e) => (
@@ -117,7 +140,7 @@ export function MatchRail({
                                     {e.minute}&apos;
                                 </span>
                                 <span className="shrink-0 text-xs">{ICON[e.kind] ?? "•"}</span>
-                                <span className="truncate text-xs">{e.player?.name ?? "—"}</span>
+                                <span className="truncate text-xs">{e.player ?? "—"}</span>
                             </div>
                         ))
                     )}
@@ -130,6 +153,14 @@ export function MatchRail({
                     Full recap <ArrowUpRight className="size-3" />
                 </Link>
             </section>
+
+            {/* The question lives here, below Key events — beside the conversation
+                rather than inside it. */}
+            {round && (
+                <div className="shrink-0">
+                    <RoundCard round={round} onAnswer={onAnswer} />
+                </div>
+            )}
         </aside>
     );
 }
