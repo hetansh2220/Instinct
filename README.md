@@ -16,7 +16,7 @@ Built on the [TxLINE](https://txline.txodds.com) on-chain sports oracle by TxODD
 |---|---|
 | **Upcoming** | Join a contest by picking Home / Draw / Away. Entries **lock at kickoff**. |
 | **Live** | Chat in the match room, play live micro-prediction games, and see real-time match events. |
-| **Full time** | The contest **settles automatically** from the final score. A correct call is worth **15 points**. |
+| **Full time** | The contest **settles automatically** from the final score. A correct call is worth **150 points**. |
 | **After** | Match timeline, team stats, per-match leaderboard, and an all-time global ranking. |
 
 ---
