@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Trophy } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { teamFlag, teamCode } from "@/lib/txline/flags";
@@ -18,9 +18,9 @@ export interface Fixture {
 }
 
 
-function timeLeft(ms?: number): string {
+function timeLeft(ms: number | undefined, now: number): string {
     if (!ms) return "";
-    const diff = ms - Date.now();
+    const diff = ms - now;
     if (diff <= 0) return "";
     const d = Math.floor(diff / 8.64e7);
     const h = Math.floor((diff % 8.64e7) / 3.6e6);
@@ -28,6 +28,13 @@ function timeLeft(ms?: number): string {
     if (d > 0) return `${d}d ${h}h`;
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
+}
+
+function isSpainArgentinaFinal(home?: string, away?: string): boolean {
+    const teams = [home, away].map((name) => name?.toLowerCase().trim() ?? "");
+    const hasSpain = teams.some((name) => name.includes("spain"));
+    const hasArgentina = teams.some((name) => name.includes("argentina") || name.includes("argantina"));
+    return hasSpain && hasArgentina;
 }
 
 export function MatchCard({
@@ -48,9 +55,9 @@ export function MatchCard({
     const home = p1IsHome ? f.Participant1 : f.Participant2;
     const away = p1IsHome ? f.Participant2 : f.Participant1;
     const start = f.StartTime ?? 0;
-    const now = Date.now();
+    const [now] = useState(() => Date.now());
     const state = !start || start > now ? "upcoming" : now < start + 2.5 * 60 * 60 * 1000 ? "live" : "completed";
-    const left = timeLeft(f.StartTime);
+    const left = timeLeft(f.StartTime, now);
 
 
     if (state === "completed" && !score) return null;
@@ -64,6 +71,7 @@ export function MatchCard({
     const matchHref = `/match/${f.FixtureId}?h=${encodeURIComponent(home ?? "")}&a=${encodeURIComponent(
         away ?? ""
     )}`;
+    const isFinalMatch = isSpainArgentinaFinal(home, away);
 
     const BUTTON =
         "flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 text-md font-semibold text-foreground shadow-inner shadow-white/5 backdrop-blur-md transition-colors hover:border-white/25 hover:bg-white/15";
@@ -72,14 +80,25 @@ export function MatchCard({
         <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
 
             <div className="flex items-center justify-between px-4 pt-4">
-                <span className="font-mono text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    {f.Competition ?? "Match"}
-                </span>
+                {isFinalMatch ? (
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-wide text-amber-300 uppercase">
+                        <Trophy className="size-3.5" />
+                        World cup Final
+                    </span>
+                ) : (
+                    <span className="font-mono text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                        {f.Competition ?? "Match"}
+                    </span>
+                )}
                 {state === "live" ? (
                     <span className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-widest text-emerald-400 uppercase">
                         <span className="relative flex size-1.5">
-                            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                            <span className="relative inline-flex size-1.5 rounded-full bg-emerald-400" />
+                            <span
+                                className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"
+                            />
+                            <span
+                                className="relative inline-flex size-1.5 rounded-full bg-emerald-400"
+                            />
                         </span>
                         live
                     </span>
@@ -93,7 +112,6 @@ export function MatchCard({
                     </span>
                 )}
             </div>
-
 
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 px-4 py-6">
                 <Team name={home} />
@@ -147,7 +165,7 @@ export function MatchCard({
 function Team({ name }: { name?: string }) {
     const code = teamCode(name);
     return (
-        <div className="flex flex-col items-center gap-2.5">
+        <div className="flex min-w-0 flex-col items-center gap-2.5">
             {code ? (
 
                 <img
